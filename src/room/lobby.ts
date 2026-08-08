@@ -118,7 +118,6 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const goLevelEl = document.getElementById("go-level");
   const roomCodeEl = document.getElementById("room-code");
   const copyBtn = document.getElementById("copy-code");
-  const leaveBtn = document.getElementById("leave-btn");
 
   const code = roomId.slice(roomId.indexOf("-") + 1);
   if (roomCodeEl) roomCodeEl.textContent = code;
@@ -126,13 +125,6 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   if (copyBtn) {
     copyBtn.addEventListener("click", () => {
       void copyRoomCode(copyBtn, code);
-    });
-  }
-
-  if (leaveBtn) {
-    leaveBtn.addEventListener("click", () => {
-      const sid = client.getSelfId();
-      if (sid) client.sendLeave(sid);
     });
   }
 
@@ -358,13 +350,6 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       renderPlayers(activePlayers());
     }
     if (e.type === "start") applyStart();
-    if (e.type === "leave") {
-      lastSeen.delete(e.userId);
-      renderPlayers(activePlayers());
-      updateLobbyBanner();
-      updateStartArea();
-      if (isHost) publish();
-    }
   });
 
   if (startBtn) {
@@ -416,8 +401,6 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   });
 
   window.addEventListener("beforeunload", () => {
-    const sid = client.getSelfId();
-    if (sid) client.sendLeave(sid);
     clearInterval(aliveInterval);
     clearInterval(pruneInterval);
     client.release();

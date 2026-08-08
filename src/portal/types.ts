@@ -18,8 +18,7 @@ export interface RoomInfo {
 
 export type RoomEvent =
   | { type: "judge"; judgeId: string }
-  | { type: "start" }
-  | { type: "leave"; userId: string };
+  | { type: "start" };
 
 export interface ChatMessage {
   type: "chat";
@@ -65,6 +64,7 @@ export interface CursorMessage {
   x: number;
   y: number;
   name: string;
+  userId: string;
 }
 
 export type RoomContent =

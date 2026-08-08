@@ -127,6 +127,7 @@ function bootJudge(roomId: string): void {
     if (m.content.type !== "cut") return;
     const label = m.content.label;
     const expected = j.order[j.cutCount];
+    console.log(`[agent] ${roomId} corte: ${label} (esperado ${expected ?? "-"})`);
     if (label === expected) {
       const c = j.cables.find((c) => c.label === label);
       if (c) c.cut = true;

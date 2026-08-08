@@ -8,6 +8,7 @@ const PANEL_X = 46;
 const PANEL_Y = 26;
 const PANEL_H = VIEW_H - PANEL_Y * 2;
 const TERMINAL_X_R = PANEL_X + PANEL_W;
+const CURSOR_THROTTLE_MS = 130;
 
 interface CableEls {
   g: SVGGElement;
@@ -65,13 +66,13 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       const c = byLabel.get(label);
       if (!c || c.cut) {
         els.line.setAttribute("stroke-dasharray", "10 6");
-        els.hit.setAttribute("pointer-events", "none");
+        els.hit.style.pointerEvents = "none";
         els.g.setAttribute("style", "transition:opacity 600ms ease 250ms;opacity:0;");
         if (!c) els.g.remove();
         continue;
       }
       const y = rowY(c.row, total);
-      els.hit.setAttribute("pointer-events", "stroke");
+      els.hit.style.pointerEvents = "stroke";
       els.line.removeAttribute("stroke-dasharray");
       els.line.setAttribute("stroke", hex(c.color));
       els.badge.setAttribute("stroke", hex(c.color));
@@ -98,8 +99,9 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
         x1: String(TERMINAL_X_R), y1: String(y),
         x2: String(VIEW_W - TERMINAL_X_R), y2: String(y),
         stroke: "transparent", "stroke-width": "26", "stroke-linecap": "round",
-        style: "cursor:pointer;pointer-events:stroke;",
+        style: "cursor:pointer;",
       });
+      hit.style.pointerEvents = "stroke";
       const badge = svgEl(NS, "circle", { cx: String(VIEW_W / 2), cy: String(y), r: "16", fill: "#0b0e14", stroke: hex(c.color), "stroke-width": "3", style: "pointer-events:none;" });
       const text = svgEl(NS, "text", { x: String(VIEW_W / 2), y: String(y + 6), "text-anchor": "middle", "font-size": "18", "font-weight": "700", fill: "#e6e9f0", "font-family": "system-ui, sans-serif", style: "pointer-events:none;" });
       text.textContent = c.label;
@@ -129,41 +131,54 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     els.text.setAttribute("y", String(y + 6));
   }
 
-  const players = new Map<string, { x: number; y: number; name: string }>();
+  const cursors = new Map<string, { x: number; y: number; name: string }>();
 
   function renderCursors(): void {
     cursorLayer.replaceChildren();
-    for (const p of players.values()) {
-      const el = document.createElement("div");
-      el.className = "cursor";
-      el.style.left = `${p.x * 100}%`;
-      el.style.top = `${p.y * 100}%`;
-      el.style.borderColor = `#${nameColor(p.name).toString(16).padStart(6, "0")}`;
-      el.textContent = p.name;
-      cursorLayer.appendChild(el);
+    for (const c of cursors.values()) {
+      const color = `#${nameColor(c.name).toString(16).padStart(6, "0")}`;
+      const dot = document.createElement("div");
+      dot.className = "cursor-dot";
+      dot.style.left = `${c.x * 100}%`;
+      dot.style.top = `${c.y * 100}%`;
+      dot.style.borderColor = color;
+      dot.style.background = color;
+      const label = document.createElement("div");
+      label.className = "cursor-name";
+      label.style.left = `${c.x * 100}%`;
+      label.style.top = `${c.y * 100}%`;
+      label.style.background = color;
+      label.textContent = c.name;
+      cursorLayer.append(dot, label);
     }
   }
 
+  const selfId = client.getSelfId();
+  let lastCursorSend = 0;
   svg.addEventListener("pointermove", (e) => {
     const rect = svg.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    players.set(selfName, { x, y, name: selfName });
-    renderCursors();
-    client.sendCursor(x, y, selfName);
+    const now = performance.now();
+    if (now - lastCursorSend >= CURSOR_THROTTLE_MS) {
+      lastCursorSend = now;
+      client.sendCursor(x, y, selfName, selfId);
+    }
   });
 
-  client.subscribeState((s) => {
+  const unsubState = client.subscribeState((s) => {
     if (s && s.cables.length) renderCables(s.cables);
   });
 
-  client.subscribeCursor((c) => {
-    if (c.name === selfName) return;
-    players.set(c.name, { x: c.x, y: c.y, name: c.name });
+  const unsubCursor = client.subscribeCursor((c) => {
+    if (c.userId === selfId) return;
+    cursors.set(c.userId, { x: c.x, y: c.y, name: c.name });
     renderCursors();
   });
 
   return () => {
+    unsubState();
+    unsubCursor();
     wrap.remove();
   };
 }

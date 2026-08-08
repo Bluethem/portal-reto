@@ -38,10 +38,9 @@ export interface RoomClient {
   getState(): RoomState | null;
   sendCut(label: string): Promise<void>;
   subscribeCursor(cb: (c: CursorMessage) => void): () => void;
-  sendCursor(x: number, y: number, name: string): void;
+  sendCursor(x: number, y: number, name: string, userId: string): void;
   subscribeActivity(cb: (users: string[]) => void): () => void;
   sendAlive(): void;
-  sendLeave(userId: string): void;
   setMeta(meta: PlayerMeta): void;
   sendEvent(e: RoomEvent): Promise<void>;
   sendChat(text: string, name: string): Promise<void>;
@@ -219,14 +218,14 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       return last?.content ?? null;
     },
     sendCut: async (label) => {
-      await actions.send({ content: { type: "cut", label } as RoomAction, ephemeral: true });
+      await actions.send({ content: { type: "cut", label } as RoomAction });
     },
     subscribeCursor: (cb) => {
       cursorListeners.add(cb);
       return () => cursorListeners.delete(cb);
     },
-    sendCursor: (x, y, name) => {
-      void room.send({ content: { type: "cursor", x, y, name } as CursorMessage, ephemeral: true });
+    sendCursor: (x, y, name, userId) => {
+      void room.send({ content: { type: "cursor", x, y, name, userId } as CursorMessage });
     },
     subscribeActivity: (cb) => {
       activityListeners.add(cb);
@@ -244,9 +243,6 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       await room.send({
         content: { type: "chat", text, name },
       });
-    },
-    sendLeave: (userId) => {
-      void room.send({ ephemeral: true, content: { type: "leave", userId } as RoomEvent });
     },
     publishRoom: async (info) => {
       index.acquire();
