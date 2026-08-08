@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "agent:bomb": "node --env-file=.env agent/bomb/agent.ts"
+    "agent:room": "node --env-file=.env agent/room/agent.ts"
   },
   "dependencies": {
     "@portalsdk/core": "^0.1.5",

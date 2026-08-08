@@ -8,17 +8,32 @@ cortar mal. El timer global decide el final (score = nivel alcanzado).
 
 ## Estado
 
-**Rediseño aprobado, sin implementación todavía.** La V1 (bomba en cadena) fue
-descartada por el equipo y sus docs/plan se limpiaron. El setup base se
-reutiliza: Astro + Portal + three.js + agente Node. El juego se construye por
-**fases** (vertical slice), cada una demo-able por sí sola; la IA (Groq) y la
-voz (LiveKit/Daily) van al final para no bloquear el núcleo jugable.
+**Fases 1 y 2 implementadas.**
 
-Espec de la iteración actual:
+**Fase 1:** username → rooms → lobby → juez aleatorio por host. Canales en uso:
+`rooms-index` (host-managed, heartbeat ~5s, TTL 10s) y `room-<id>` (presencia +
+eventos, p.ej. `judge`). La V1 (bomba en cadena) fue eliminada junto con su agente.
+
+**Fase 2 (nivel 1 jugable sin IA):** el agente juez (`agent/room/agent.ts`) es la
+fuente de verdad del orden correcto: genera el nivel (tablero + orden + manual
+por template), valida cada corte, lleva el timer (3:00, +1:00 por nivel, -15 s
+por corte mal) y publica `RoomState` en `room-<id>`. Los 3 cortadores ven un
+tablero 3D (three.js) con cables **color + etiqueta** y cursores en vivo con
+nombre (efímeros); el director ve solo el manual (2D). Una sola página `/room`
+monta la vista por rol al recibir `start` del host. `room-<id>-actions` lleva
+los cortes; los clientes nunca reciben el orden.
+
+Pendiente: fases 3-6 (generación procedural, IA con Groq, voz y despliegue).
+Cada fase es demo-able por sí sola; la IA y la voz van al final para no
+bloquear el núcleo jugable.
+
+Espec y plan:
 - `docs/superpowers/specs/2026-08-07-cable-rush-design.md`
+- `docs/superpowers/plans/2026-08-07-cable-rush-fase2.md`
 
-Próximo paso cuando se retome la implementación: plan de la fase 1
-(menú + rooms + lobby) con la skill writing-plans.
+Próximo paso cuando se retome la implementación: plan de la fase 3
+(generación procedural: seed por nivel, reglas crecientes, solución única)
+con la skill writing-plans.
 
 ## Development
 
@@ -81,7 +96,7 @@ Typecheck:
   progreso). SOLO el agente juez lo escribe; los clientes solo leen.
 - Canal `room-<id>-actions` — cortes e intentos publicados por los clientes; el
   agente los consume y actualiza `room-<id>`.
-- Presence metadata por canal de room — `{ role: "director" | "cutter", host: bool }`.
+- Presence metadata por canal de room — `{ role: "judge" | "cutter", host: bool }`. El juez (director) lo elige el host al azar al llegar 4 jugadores; el host inicia la partida con "Iniciar partida" (`{ type: "start" }`).
 
 ## Estructura de carpetas (objetivo v2)
 
