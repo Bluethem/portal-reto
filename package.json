@@ -1,0 +1,26 @@
+{
+  "name": "portal-reto",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "agent:bomb": "node --env-file=.env agent/bomb/agent.ts"
+  },
+  "dependencies": {
+    "@portalsdk/core": "^0.1.5",
+    "@types/three": "^0.185.3",
+    "astro": "^7.1.6",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.1.2",
+    "typescript": "^6.0.3"
+  }
+}

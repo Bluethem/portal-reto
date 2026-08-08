@@ -1,3 +1,10 @@
+# build output
+dist/
+
+# generated types
+.astro/
+.vscode/
+
 # Logs
 logs
 *.log
