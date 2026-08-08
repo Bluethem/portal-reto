@@ -47,6 +47,12 @@ export interface LevelRules {
   steps: string[];
 }
 
+export interface StateEffect {
+  kind: "freeze" | "blind" | "scramble" | "lockCut";
+  userId?: string;
+  expiresAt: number;
+}
+
 export interface RoomState {
   status: "lobby" | "playing" | "finished";
   level: number;
@@ -54,6 +60,7 @@ export interface RoomState {
   rules: LevelRules;
   cutCount: number;
   timerMs: number;
+  effects: StateEffect[];
   updatedAt: number;
 }
 

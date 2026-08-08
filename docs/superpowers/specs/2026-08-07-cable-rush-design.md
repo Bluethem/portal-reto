@@ -56,12 +56,20 @@ timer, colors, attachPick), tablero SVG, patrón del agente Node.
 - Dificultad creciente: más colores posibles + reglas anidadas (de 1 condición
   a múltiples con "y"/"si no").
 
-## 6. IA (fase 4)
+## 6. IA (fase 4b, diferida)
 
-- Input: JSON de reglas + nivel. Output: manual legible para el director.
+- Input: JSON de reglas + nivel. Output: manual/hints legibles para el director.
 - La IA **no decide la lógica** — la redacta (estilo manual de bombas).
 - **Fallback:** si Groq falla o tarda, se muestra el template determinístico.
 - Bonus (si sobra tiempo): copiloto de hints para el director.
+
+## 6b. Efectos de estado (fase 4)
+
+- Trabajas deterministas desde el nivel 4: `freeze` (puntero congelado), `blind`
+  (niebla), `scramble` (cortocircuito) y `lockCut` (bloqueo de corte).
+- Trigger: cortes malos (nivel ≥ 4) y efecto global periódico (nivel ≥ 5).
+- El agente los publica en `RoomState.effects` (solo activos) y el board los aplica.
+- La IA no interviene: la lógica (orden/solución única) queda intacta.
 
 ## 7. Fases de construcción (cada una demo-able)
 
@@ -70,7 +78,8 @@ timer, colors, attachPick), tablero SVG, patrón del agente Node.
 | 1 | Menú + rooms + lobby (Portal, presencia, arranque a 4) | Sí |
 | 2 | Nivel 1 sin IA: tablero, corte, orden, timer + bonus, manual por template | Sí |
 | 3 | Generación procedural: seed por nivel, reglas crecientes, solución única | Sí |
-| 4 | IA (Groq): manual redactado desde el JSON (+ copiloto opcional) | Sí |
+| 4 | Efectos de estado: trabas deterministas (freeze, niebla, cortocircuito, lockCut) desde nivel 4 | Sí |
+| 4b | IA (Groq): hints del director + briefing de misión (diferido) | Sí |
 | 5 | Voz WebRTC (LiveKit/Daily) | Sí |
 | 6 | Despliegue Vercel + Render + test 4 jugadores | Sí |
 

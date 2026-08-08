@@ -1,6 +1,6 @@
 import { Portal } from "@portalsdk/core";
 import type { ChannelHandle, ChannelStatus, DetailedPresence } from "@portalsdk/core";
-import type { RoomAction, RoomState, RoomEvent, RoomInfo, LevelRules, Cable } from "../../src/portal/types.ts";
+import type { RoomAction, RoomState, RoomEvent, RoomInfo, LevelRules, Cable, StateEffect } from "../../src/portal/types.ts";
 import { generateLevel } from "./generator.ts";
 
 const PUBLIC_PORTAL_KEY = process.env.PUBLIC_PORTAL_KEY ?? "";
@@ -16,6 +16,14 @@ const index: ChannelHandle<RoomInfo> = portal.channel<RoomInfo>("rooms-index", {
 const START_TIMER_MS = 180_000;
 const LEVEL_BONUS_MS = 60_000;
 const CUT_PENALTY_MS = 15_000;
+const EFFECTS_MIN_LEVEL = 4;
+const EFFECTS_EXTRA_MIN_LEVEL = 5;
+const FREEZE_MS = 4_000;
+const LOCK_CUT_MS = 1_500;
+const SCRAMBLE_MS = 2_000;
+const BLIND_MS = 3_000;
+const EXTRA_GLOBAL_CHANCE = 0.5;
+const PERIODIC_EFFECT_INTERVAL_MS = 25_000;
 
 interface Judge {
   roomId: string;
@@ -28,6 +36,8 @@ interface Judge {
   rules: LevelRules;
   cutCount: number;
   timerMs: number;
+  effects: StateEffect[];
+  nextEffectAt: number;
   timer: ReturnType<typeof setInterval> | null;
   tick: ReturnType<typeof setInterval> | null;
   started: boolean;
@@ -42,6 +52,32 @@ function isHuman(count: number, room: ChannelHandle<RoomState | RoomEvent>): boo
   return p.participants.filter((x) => x.metadata?.kind !== "agent").length === count;
 }
 
+function activeEffects(j: Judge): StateEffect[] {
+  const now = Date.now();
+  j.effects = j.effects.filter((e) => e.expiresAt > now);
+  return j.effects;
+}
+
+function addEffect(j: Judge, effect: StateEffect): void {
+  j.effects.push(effect);
+}
+
+function randomGlobalEffect(now: number): StateEffect {
+  const roll = Math.random();
+  if (roll < 0.4) return { kind: "blind", expiresAt: now + BLIND_MS };
+  if (roll < 0.7) return { kind: "scramble", expiresAt: now + SCRAMBLE_MS };
+  return { kind: "lockCut", expiresAt: now + LOCK_CUT_MS };
+}
+
+function maybePeriodicEffect(j: Judge): void {
+  const now = Date.now();
+  if (j.level < EFFECTS_EXTRA_MIN_LEVEL) return;
+  if (now < j.nextEffectAt) return;
+  j.nextEffectAt = now + PERIODIC_EFFECT_INTERVAL_MS;
+  addEffect(j, randomGlobalEffect(now));
+  console.log(`[agent] ${j.roomId} efecto periódico (nivel ${j.level})`);
+}
+
 function publish(j: Judge): void {
   void j.room.send({
     content: {
@@ -51,6 +87,7 @@ function publish(j: Judge): void {
       rules: j.rules,
       cutCount: j.cutCount,
       timerMs: j.timerMs,
+      effects: activeEffects(j),
       updatedAt: Date.now(),
     },
   });
@@ -62,6 +99,8 @@ function startLevel(j: Judge): void {
   j.order = gen.order;
   j.rules = gen.rules;
   j.cutCount = 0;
+  j.effects = [];
+  j.nextEffectAt = Date.now() + PERIODIC_EFFECT_INTERVAL_MS;
   console.log(`[agent] ${j.roomId} nivel ${j.level} seed=${gen.seed} soluciones=${gen.solutions} reglas=${gen.rules.steps.length}`);
   publish(j);
 }
@@ -72,10 +111,11 @@ function startTimer(j: Judge): void {
     j.timerMs = Math.max(0, j.timerMs - 1000);
     if (j.timerMs === 0) {
       j.finished = true;
-      void j.room.send({ content: { status: "finished", level: j.level, cables: j.cables, rules: j.rules, cutCount: j.cutCount, timerMs: 0, updatedAt: Date.now() } });
+      void j.room.send({ content: { status: "finished", level: j.level, cables: j.cables, rules: j.rules, cutCount: j.cutCount, timerMs: 0, effects: [], updatedAt: Date.now() } });
       stopTimer(j);
       return;
     }
+    maybePeriodicEffect(j);
     publish(j);
   }, 1000);
 }
@@ -108,6 +148,8 @@ function bootJudge(roomId: string): void {
     rules: { summary: "", steps: [] },
     cutCount: 0,
     timerMs: START_TIMER_MS,
+    effects: [],
+    nextEffectAt: Date.now() + PERIODIC_EFFECT_INTERVAL_MS,
     timer: null,
     tick: null,
     started: false,
@@ -145,6 +187,12 @@ function bootJudge(roomId: string): void {
       }
     } else {
       j.timerMs = Math.max(0, j.timerMs - CUT_PENALTY_MS);
+      if (j.level >= EFFECTS_MIN_LEVEL) {
+        addEffect(j, { kind: "freeze", userId: m.sender.id, expiresAt: Date.now() + FREEZE_MS });
+        if (j.level >= EFFECTS_EXTRA_MIN_LEVEL && Math.random() < EXTRA_GLOBAL_CHANCE) {
+          addEffect(j, randomGlobalEffect(Date.now()));
+        }
+      }
       publish(j);
       console.log(`[agent] ${roomId} corte mal (-15s): ${label} esperado ${expected}`);
     }

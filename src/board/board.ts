@@ -1,5 +1,5 @@
 import type { RoomClient } from "../portal/client";
-import type { Cable } from "../portal/types";
+import type { Cable, StateEffect } from "../portal/types";
 
 const VIEW_W = 800;
 const VIEW_H = 460;
@@ -41,7 +41,15 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   const pendingCuts = new Set<string>();
   const cursorLayer = document.createElement("div");
   cursorLayer.className = "cursor-layer";
-  wrap.append(svg, cursorLayer);
+  const freezeOverlay = document.createElement("div");
+  freezeOverlay.className = "effect-overlay effect-freeze";
+  freezeOverlay.textContent = "CONGELADO";
+  const blindOverlay = document.createElement("div");
+  blindOverlay.className = "effect-overlay effect-blind";
+  const effectLayer = document.createElement("div");
+  effectLayer.className = "effect-layer";
+  effectLayer.append(freezeOverlay, blindOverlay);
+  wrap.append(svg, cursorLayer, effectLayer);
   container.appendChild(wrap);
 
   const nameColors = new Map<string, number>();
@@ -198,8 +206,29 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     }
   });
 
+  function applyEffects(effects: StateEffect[]): void {
+    const now = Date.now();
+    const active = effects.filter((e) => e.expiresAt > now);
+    const frozen = active.some((e) => e.kind === "freeze" && e.userId === selfId);
+    const blind = active.some((e) => e.kind === "blind");
+    const scramble = active.some((e) => e.kind === "scramble");
+    const lockCut = active.some((e) => e.kind === "lockCut");
+
+    freezeOverlay.classList.toggle("visible", frozen);
+    blindOverlay.classList.toggle("visible", blind);
+    svg.classList.toggle("effect-scramble", scramble);
+
+    const interactive = !frozen && !lockCut;
+    svg.style.pointerEvents = interactive ? "auto" : "none";
+    for (const els of cableEls.values()) {
+      els.hit.style.pointerEvents = interactive ? "stroke" : "none";
+    }
+  }
+
   const unsubState = client.subscribeState((s) => {
-    if (s && s.cables.length) renderCables(s.cables);
+    if (!s) return;
+    if (s.cables.length) renderCables(s.cables);
+    applyEffects(s.effects ?? []);
   });
 
   const unsubCursor = client.subscribeCursor((c) => {
