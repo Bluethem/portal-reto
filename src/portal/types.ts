@@ -35,8 +35,8 @@ export interface ChatEntry {
 export interface Cable {
   label: string;
   color: number;
-  position: [number, number, number];
-  rotation: [number, number, number];
+  row: number;
+  cut: boolean;
 }
 
 export interface LevelRules {

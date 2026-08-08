@@ -24,15 +24,15 @@ export function generateLevel(level: number): GeneratedLevel {
   const cables: Cable[] = [];
   const order = shuffle(LABELS.slice(0, count));
   const used = new Map<number, number>();
+  const rows = shuffle([...Array(count).keys()]);
   for (let i = 0; i < count; i++) {
     const color = colorPool[i % colorPool.length];
     used.set(color, (used.get(color) ?? 0) + 1);
-    const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
     cables.push({
       label: order[i],
       color,
-      position: [Math.cos(angle) * 1.6, Math.sin(angle) * 0.6 + 0.4, 0.9],
-      rotation: [0, 0, angle + Math.PI / 2],
+      row: rows[i],
+      cut: false,
     });
   }
   const firstColor = cables.find((c) => c.label === order[0])!.color;

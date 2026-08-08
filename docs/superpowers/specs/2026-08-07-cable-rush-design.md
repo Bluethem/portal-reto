@@ -7,7 +7,7 @@ Reemplaza: `2026-08-07-bomba-en-cadena-design.md` (V1 descartada)
 ## 1. Visión y alcance
 
 Co-op de 4 jugadores con información asimétrica. 3 jugadores cortan cables en un
-tablero 3D compartido; 1 director humano tiene un **manual** (no ve el tablero)
+tablero 2D compartido; 1 director humano tiene un **manual** (no ve el tablero)
 y dicta el orden por voz. Niveles endless con dificultad creciente; el equipo
 gana tiempo al superarlos y pierde tiempo al cortar mal. El timer global decide
 el final (score = nivel alcanzado).
@@ -29,7 +29,7 @@ solo. La IA y la voz van al final para no bloquear el núcleo jugable.
   reglas determinístico. **No decide la lógica** — solo la explica.
 
 **Reuso de la V1:** `portal/` (client, types, presencia), `shared/` (flash,
-timer, colors, attachPick), escena three.js base, patrón del agente Node.
+timer, colors, attachPick), tablero SVG, patrón del agente Node.
 
 ## 3. Concepto del juego
 
