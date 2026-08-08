@@ -2,7 +2,7 @@
 
 Fecha: 2026-08-08
 Estado: aprobado (diseño validado con el equipo)
-Modifica: `2026-08-07-cable-rush-design.md` (sección 9, tablero)
+Modifica: `2026-08-07-cable-rush-design.md` (secciones 2 y 9, tablero)
 
 ## 1. Motivación
 
