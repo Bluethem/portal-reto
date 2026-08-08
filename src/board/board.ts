@@ -8,7 +8,9 @@ const PANEL_X = 46;
 const PANEL_Y = 26;
 const PANEL_H = VIEW_H - PANEL_Y * 2;
 const TERMINAL_X_R = PANEL_X + PANEL_W;
-const CURSOR_THROTTLE_MS = 130;
+const CURSOR_THROTTLE_MS = 300;
+const CURSOR_MOVE_EPS = 0.008;
+const PENDING_CUT_MS = 1500;
 
 interface CableEls {
   g: SVGGElement;
@@ -17,6 +19,8 @@ interface CableEls {
   hit: SVGLineElement;
   badge: SVGCircleElement;
   text: SVGTextElement;
+  row: number;
+  toRow: number;
 }
 
 function svgEl<K extends keyof SVGElementTagNameMap>(ns: string, tag: K, attrs: Record<string, string>): SVGElementTagNameMap[K] {
@@ -36,6 +40,7 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   svg.append(panelL, panelR);
 
   const cableEls = new Map<string, CableEls>();
+  const pendingCuts = new Set<string>();
   const cursorLayer = document.createElement("div");
   cursorLayer.className = "cursor-layer";
   wrap.append(svg, cursorLayer);
@@ -59,76 +64,98 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     return PANEL_Y + 20 + row * spacing;
   }
 
+  function placeCable(els: CableEls, total: number): void {
+    const x1 = TERMINAL_X_R;
+    const x2 = VIEW_W - TERMINAL_X_R;
+    const y1 = rowY(els.row, total);
+    const y2 = rowY(els.toRow, total);
+    const cx = VIEW_W / 2;
+    const cy = (y1 + y2) / 2;
+    for (const el of [els.line, els.stripe, els.hit]) {
+      el.setAttribute("x1", String(x1));
+      el.setAttribute("y1", String(y1));
+      el.setAttribute("x2", String(x2));
+      el.setAttribute("y2", String(y2));
+    }
+    els.badge.setAttribute("cx", String(cx));
+    els.badge.setAttribute("cy", String(cy));
+    els.text.setAttribute("x", String(cx));
+    els.text.setAttribute("y", String(cy + 6));
+  }
+
+  function applyCutLook(els: CableEls): void {
+    els.line.setAttribute("stroke", "#ff5252");
+    els.stripe.setAttribute("stroke", "#ff5252");
+    els.line.setAttribute("stroke-dasharray", "10 6");
+    els.hit.style.pointerEvents = "none";
+    els.g.setAttribute("style", "transition:opacity 600ms ease 300ms;opacity:0;");
+  }
+
   function renderCables(cables: Cable[]): void {
     const total = Math.max(cables.length, 1);
     const byLabel = new Map(cables.map((c) => [c.label, c] as const));
     for (const [label, els] of cableEls) {
       const c = byLabel.get(label);
-      if (!c || c.cut) {
+      const isCut = c ? c.cut || pendingCuts.has(c.label) : true;
+      if (!c || isCut) {
         els.line.setAttribute("stroke-dasharray", "10 6");
         els.hit.style.pointerEvents = "none";
         els.g.setAttribute("style", "transition:opacity 600ms ease 250ms;opacity:0;");
         if (!c) els.g.remove();
+        if (c && c.cut) pendingCuts.delete(c.label);
         continue;
       }
-      const y = rowY(c.row, total);
       els.hit.style.pointerEvents = "stroke";
       els.line.removeAttribute("stroke-dasharray");
       els.line.setAttribute("stroke", hex(c.color));
       els.badge.setAttribute("stroke", hex(c.color));
       els.g.setAttribute("style", "opacity:1;transition:none;");
-      setLineY(els, y);
+      els.row = c.row;
+      els.toRow = c.toRow;
+      placeCable(els, total);
     }
     for (const c of cables) {
       if (c.cut) continue;
       if (cableEls.has(c.label)) continue;
-      const y = rowY(c.row, total);
       const g = svgEl(NS, "g", {});
       const line = svgEl(NS, "line", {
-        x1: String(TERMINAL_X_R), y1: String(y),
-        x2: String(VIEW_W - TERMINAL_X_R), y2: String(y),
+        x1: String(TERMINAL_X_R), y1: "0",
+        x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
         stroke: hex(c.color), "stroke-width": "10", "stroke-linecap": "round",
       });
       const stripe = svgEl(NS, "line", {
-        x1: String(TERMINAL_X_R), y1: String(y),
-        x2: String(VIEW_W - TERMINAL_X_R), y2: String(y),
+        x1: String(TERMINAL_X_R), y1: "0",
+        x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
         stroke: "#ffffff", "stroke-width": "2", "stroke-linecap": "round",
         "stroke-dasharray": "2 14", opacity: "0.35",
       });
       const hit = svgEl(NS, "line", {
-        x1: String(TERMINAL_X_R), y1: String(y),
-        x2: String(VIEW_W - TERMINAL_X_R), y2: String(y),
+        x1: String(TERMINAL_X_R), y1: "0",
+        x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
         stroke: "transparent", "stroke-width": "26", "stroke-linecap": "round",
         style: "cursor:pointer;",
       });
       hit.style.pointerEvents = "stroke";
-      const badge = svgEl(NS, "circle", { cx: String(VIEW_W / 2), cy: String(y), r: "16", fill: "#0b0e14", stroke: hex(c.color), "stroke-width": "3", style: "pointer-events:none;" });
-      const text = svgEl(NS, "text", { x: String(VIEW_W / 2), y: String(y + 6), "text-anchor": "middle", "font-size": "18", "font-weight": "700", fill: "#e6e9f0", "font-family": "system-ui, sans-serif", style: "pointer-events:none;" });
+      const badge = svgEl(NS, "circle", { cx: String(VIEW_W / 2), cy: "0", r: "16", fill: "#0b0e14", stroke: hex(c.color), "stroke-width": "3", style: "pointer-events:none;" });
+      const text = svgEl(NS, "text", { x: String(VIEW_W / 2), y: "6", "text-anchor": "middle", "font-size": "18", "font-weight": "700", fill: "#e6e9f0", "font-family": "system-ui, sans-serif", style: "pointer-events:none;" });
       text.textContent = c.label;
       g.append(line, stripe, hit, badge, text);
 
+      const els: CableEls = { g, line, stripe, hit, badge, text, row: c.row, toRow: c.toRow };
+      placeCable(els, total);
+
       hit.addEventListener("pointerdown", () => {
-        void client.sendCut(c.label);
-        line.setAttribute("stroke", "#ff5252");
-        stripe.setAttribute("stroke", "#ff5252");
+        pendingCuts.add(c.label);
+        applyCutLook(els);
         window.setTimeout(() => {
-          line.setAttribute("stroke", hex(c.color));
-          stripe.setAttribute("stroke", "#ffffff");
-        }, 350);
+          if (pendingCuts.has(c.label)) pendingCuts.delete(c.label);
+        }, PENDING_CUT_MS);
+        void client.sendCut(c.label).catch(() => undefined);
       });
 
       svg.appendChild(g);
-      cableEls.set(c.label, { g, line, stripe, hit, badge, text });
+      cableEls.set(c.label, els);
     }
-  }
-
-  function setLineY(els: CableEls, y: number): void {
-    for (const el of [els.line, els.stripe, els.hit]) {
-      el.setAttribute("y1", String(y));
-      el.setAttribute("y2", String(y));
-    }
-    els.badge.setAttribute("cy", String(y));
-    els.text.setAttribute("y", String(y + 6));
   }
 
   const cursors = new Map<string, { x: number; y: number; name: string }>();
@@ -155,13 +182,19 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
 
   const selfId = client.getSelfId();
   let lastCursorSend = 0;
+  let lastCursorX = -1;
+  let lastCursorY = -1;
   svg.addEventListener("pointermove", (e) => {
     const rect = svg.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
+    const moved =
+      Math.abs(x - lastCursorX) > CURSOR_MOVE_EPS || Math.abs(y - lastCursorY) > CURSOR_MOVE_EPS;
     const now = performance.now();
-    if (now - lastCursorSend >= CURSOR_THROTTLE_MS) {
+    if (moved && now - lastCursorSend >= CURSOR_THROTTLE_MS) {
       lastCursorSend = now;
+      lastCursorX = x;
+      lastCursorY = y;
       client.sendCursor(x, y, selfName, selfId);
     }
   });

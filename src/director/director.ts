@@ -15,7 +15,7 @@ export function mountDirector(container: HTMLElement, client: RoomClient): () =>
       <div class="bg-sand rounded-[16px] p-6 mb-6 border-l-[6px] border-sunbeam-yellow">
         <p id="manual-summary" class="text-body-sm text-carbon">Esperando nivel...</p>
       </div>
-      <ol id="manual-steps" class="flex flex-col gap-2"></ol>
+      <ul id="manual-steps" class="flex flex-col gap-2"></ul>
     </div>
   `;
 

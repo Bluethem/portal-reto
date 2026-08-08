@@ -38,6 +38,7 @@ export interface Cable {
   label: string;
   color: number;
   row: number;
+  toRow: number;
   cut: boolean;
 }
 

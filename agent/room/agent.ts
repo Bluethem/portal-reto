@@ -21,6 +21,7 @@ interface Judge {
   roomId: string;
   room: ChannelHandle<RoomState | RoomEvent>;
   actions: ChannelHandle<RoomAction>;
+  roomSeed: number;
   level: number;
   cables: Cable[];
   order: string[];
@@ -56,11 +57,12 @@ function publish(j: Judge): void {
 }
 
 function startLevel(j: Judge): void {
-  const gen = generateLevel(j.level);
+  const gen = generateLevel(j.level, j.roomSeed);
   j.cables = gen.cables;
   j.order = gen.order;
   j.rules = gen.rules;
   j.cutCount = 0;
+  console.log(`[agent] ${j.roomId} nivel ${j.level} seed=${gen.seed} soluciones=${gen.solutions} reglas=${gen.rules.steps.length}`);
   publish(j);
 }
 
@@ -99,6 +101,7 @@ function bootJudge(roomId: string): void {
     roomId,
     room,
     actions,
+    roomSeed: Math.floor(Math.random() * 0x7fffffff),
     level: 1,
     cables: [],
     order: [],
