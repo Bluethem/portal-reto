@@ -21,12 +21,31 @@ export function bootMenu(): void {
 
 function renderUsername(root: HTMLElement, onDone: (name: string) => void): void {
   root.innerHTML = `
-    <h1>Cable Rush</h1>
-    <form id="user-form">
-      <label>Tu nombre</label>
-      <input id="user-name" maxlength="16" autofocus />
-      <button type="submit">Entrar</button>
-    </form>
+    <div class="min-h-screen bg-slate-gray flex flex-col items-center justify-center px-10 relative overflow-hidden">
+      <div class="text-center mb-10">
+        <h1 class="text-hero text-sunbeam-yellow lowercase tracking-tight mb-1">cable rush</h1>
+        <p class="text-heading-sm text-paper-white font-bold opacity-90">Identidad para continuar</p>
+      </div>
+      <form id="user-form" class="bg-sand rounded-[24px] p-10 w-full max-w-md relative text-center">
+        <div class="text-left mb-6">
+          <label class="sr-only" for="user-name">Callsign</label>
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">person</span>
+            <input
+              id="user-name"
+              maxlength="16"
+              autofocus
+              placeholder="Ingresa tu callsign"
+              class="block w-full pl-12 pr-4 py-4 bg-fog border border-outline-variant rounded-[6px] text-body text-carbon placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-electric-violet focus:border-transparent transition-all"
+            />
+          </div>
+        </div>
+        <button type="submit" class="w-full bg-electric-violet text-paper-white text-subheading py-4 rounded-[34px] shadow-pill hover:bg-secondary-container transition-colors">
+          Conectar a la red
+        </button>
+        <span class="absolute left-1/2 -bottom-[15px] -translate-x-1/2 w-0 h-0 border-l-[15px] border-r-[15px] border-t-[15px] border-l-transparent border-r-transparent border-t-sand"></span>
+      </form>
+    </div>
   `;
   const form = document.getElementById("user-form") as HTMLFormElement;
   const input = document.getElementById("user-name") as HTMLInputElement;
@@ -39,35 +58,61 @@ function renderUsername(root: HTMLElement, onDone: (name: string) => void): void
 
 function renderRooms(root: HTMLElement, menu: ReturnType<typeof createMenuClient>): void {
   root.innerHTML = `
-    <h1>Cable Rush</h1>
-    <section>
-      <h2>Crear room</h2>
-      <form id="create-form">
-        <input id="create-name" maxlength="24" placeholder="Nombre (opcional)" />
-        <select id="create-mode">
-          <option value="public">Pública</option>
-          <option value="private">Privada (código)</option>
-        </select>
-        <button type="submit">Crear</button>
-      </form>
-    </section>
-    <section>
-      <h2>Unirse con código</h2>
-      <form id="join-form">
-        <input id="join-code" maxlength="8" placeholder="Código" />
-        <button type="submit">Unirse</button>
-      </form>
-    </section>
-    <section>
-      <h2>Rooms públicas</h2>
-      <div id="rooms-status">conectando...</div>
-      <table>
-        <thead>
-          <tr><th>Nombre</th><th>Jugadores</th><th>Host</th><th></th></tr>
-        </thead>
-        <tbody id="rooms-body"></tbody>
-      </table>
-    </section>
+    <div class="min-h-screen flex flex-col">
+      <header class="bg-slate-gray w-full flex-none">
+        <div class="flex items-center justify-between w-full px-10 py-2 max-w-[1200px] mx-auto h-20">
+          <span class="text-heading-sm font-extrabold text-sunbeam-yellow lowercase">cable rush</span>
+        </div>
+      </header>
+      <main class="flex-1 w-full max-w-[1200px] mx-auto px-10 py-15">
+        <div class="mb-10">
+          <h1 class="text-display text-carbon mb-5">Operaciones activas</h1>
+          <p class="text-body-sm text-on-surface-variant">Selecciona una operación o crea la tuya.</p>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-7">
+          <section class="lg:col-span-2">
+            <div id="rooms-status" class="text-caption text-slate-gray mb-5">conectando...</div>
+            <div id="rooms-body" class="grid grid-cols-1 md:grid-cols-2 gap-0"></div>
+          </section>
+          <aside class="flex flex-col gap-6">
+            <form id="create-form" class="bg-paper-white rounded-card p-6 shadow-pill flex flex-col gap-5">
+              <h3 class="text-heading-sm text-carbon">Nueva operación</h3>
+              <input
+                id="create-name"
+                maxlength="24"
+                placeholder="Nombre (opcional)"
+                class="bg-fog border border-outline-variant rounded-[6px] px-3 py-2 text-body-sm text-carbon placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-electric-violet"
+              />
+              <select
+                id="create-mode"
+                class="bg-fog border border-outline-variant rounded-[6px] px-3 py-2 text-body-sm text-carbon focus:outline-none focus:ring-2 focus:ring-electric-violet"
+              >
+                <option value="public">Pública</option>
+                <option value="private">Privada (código)</option>
+              </select>
+              <button type="submit" class="bg-electric-violet text-paper-white text-body-sm font-bold py-2 rounded-full shadow-pill hover:bg-secondary-container transition-colors">
+                Crear operación
+              </button>
+            </form>
+            <form id="join-form" class="bg-paper-white rounded-card p-6 shadow-pill flex flex-col gap-5">
+              <h3 class="text-heading-sm text-carbon">Unirse con código</h3>
+              <div class="relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">key</span>
+                <input
+                  id="join-code"
+                  maxlength="8"
+                  placeholder="Código"
+                  class="w-full pl-10 pr-3 py-2 bg-fog border border-outline-variant rounded-[6px] text-body-sm text-carbon uppercase placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-electric-violet"
+                />
+              </div>
+              <button type="submit" class="bg-electric-violet text-paper-white text-body-sm font-bold py-2 rounded-full shadow-pill hover:bg-secondary-container transition-colors">
+                Unirse
+              </button>
+            </form>
+          </aside>
+        </div>
+      </main>
+    </div>
   `;
 
   const createForm = document.getElementById("create-form") as HTMLFormElement;
@@ -92,29 +137,45 @@ function renderRooms(root: HTMLElement, menu: ReturnType<typeof createMenuClient
   const statusEl = document.getElementById("rooms-status");
   const body = document.getElementById("rooms-body");
   menu.subscribeStatus((s) => {
-    if (statusEl) statusEl.textContent = s;
+    if (statusEl) statusEl.textContent = s === "ready" ? "Red operativa." : `Estado: ${s}`;
   });
   menu.subscribeRooms((rooms) => {
     if (!body) return;
     body.replaceChildren();
     const pubs = rooms.filter((r) => r.mode === "public");
     for (const r of pubs) {
-      const tr = document.createElement("tr");
-      const name = document.createElement("td");
-      name.textContent = r.name;
-      const players = document.createElement("td");
-      players.textContent = `${r.players}/4`;
-      const host = document.createElement("td");
-      host.textContent = r.hostName;
-      const join = document.createElement("td");
-      const btn = document.createElement("button");
-      btn.textContent = "Unirse";
-      btn.addEventListener("click", () => {
-        window.location.href = `/room?id=${encodeURIComponent(r.id)}`;
-      });
-      join.appendChild(btn);
-      tr.append(name, players, host, join);
-      body.appendChild(tr);
+      body.appendChild(roomCard(r.name, r.players, r.hostName, r.id));
     }
   });
+}
+
+function roomCard(name: string, players: number, hostName: string, id: string): HTMLElement {
+  const card = document.createElement("div");
+  card.className =
+    "bg-paper-white rounded-card overflow-hidden flex flex-col group hover:-translate-y-1 transition-transform duration-200 shadow-pill m-5";
+  card.innerHTML = `
+    <div class="bg-sunbeam-yellow aspect-video w-full relative flex items-center justify-center">
+      <span class="material-symbols-outlined text-[56px] text-carbon">cable</span>
+    </div>
+    <div class="p-6 flex flex-col flex-1">
+      <h3 class="text-heading text-carbon mb-1">${escapeHtml(name)}</h3>
+      <div class="flex items-center gap-5 mb-6 text-carbon text-body-sm">
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[20px]">group</span> ${players}/4</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[20px]">bolt</span> ${escapeHtml(hostName)}</span>
+      </div>
+      <div class="mt-auto">
+        <button class="join-btn w-full bg-electric-violet text-paper-white text-body-sm font-bold py-1 rounded-full shadow-pill hover:bg-secondary-container transition-all group-hover:scale-[1.02]">Unirse</button>
+      </div>
+    </div>
+  `;
+  card.querySelector<HTMLButtonElement>(".join-btn")!.addEventListener("click", () => {
+    window.location.href = `/room?id=${encodeURIComponent(id)}`;
+  });
+  return card;
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
 }
