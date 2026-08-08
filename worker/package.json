@@ -1,0 +1,13 @@
+{
+  "name": "cable-rush-judge",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx wrangler dev",
+    "deploy": "npx wrangler deploy"
+  },
+  "dependencies": {
+    "@portalsdk/core": "^0.1.5"
+  }
+}
