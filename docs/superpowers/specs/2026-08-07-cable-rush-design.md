@@ -7,7 +7,7 @@ Reemplaza: `2026-08-07-bomba-en-cadena-design.md` (V1 descartada)
 ## 1. Visión y alcance
 
 Co-op de 4 jugadores con información asimétrica. 3 jugadores cortan cables en un
-tablero 3D compartido; 1 director humano tiene un **manual** (no ve el tablero)
+tablero 2D compartido; 1 director humano tiene un **manual** (no ve el tablero)
 y dicta el orden por voz. Niveles endless con dificultad creciente; el equipo
 gana tiempo al superarlos y pierde tiempo al cortar mal. El timer global decide
 el final (score = nivel alcanzado).
@@ -17,7 +17,8 @@ solo. La IA y la voz van al final para no bloquear el núcleo jugable.
 
 ## 2. Arquitectura
 
-- **Cliente:** Astro estático en **Vercel**. Menú, rooms y tablero three.js.
+- **Cliente:** Astro estático en **Vercel**. Menú, rooms y tablero 2D (SVG)
+  de cables. (Ver `2026-08-08-cable-rush-board-2d-design.md`.)
 - **Portal (`@portalsdk/core`):** conexión, presencia, canales de rooms y
   estado. El SDK **no trae voz** (media kinds rechazados en v1).
 - **Agente juez central (Node):** un proceso maneja todas las rooms — estado por
@@ -28,7 +29,7 @@ solo. La IA y la voz van al final para no bloquear el núcleo jugable.
   reglas determinístico. **No decide la lógica** — solo la explica.
 
 **Reuso de la V1:** `portal/` (client, types, presencia), `shared/` (flash,
-timer, colors, attachPick), escena three.js base, patrón del agente Node.
+timer, colors, attachPick), tablero SVG, patrón del agente Node.
 
 ## 3. Concepto del juego
 
@@ -90,7 +91,7 @@ timer, colors, attachPick), escena three.js base, patrón del agente Node.
 src/
 ├── menu/          # lista de rooms, crear/unirse (Portal)
 ├── room/          # lobby + roles + HUD del juego
-├── board/         # tablero 3D de cables (three.js, reusa base)
+├── board/         # tablero 2D de cables (SVG, reusa base)
 ├── director/      # vista del manual para el director
 ├── portal/        # reuso: client, types, presencia
 ├── shared/        # reuso: flash, timer, colors, attachPick

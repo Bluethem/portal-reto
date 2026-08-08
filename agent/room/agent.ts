@@ -1,6 +1,6 @@
 import { Portal } from "@portalsdk/core";
 import type { ChannelHandle, ChannelStatus, DetailedPresence } from "@portalsdk/core";
-import type { RoomAction, RoomState, RoomEvent, RoomInfo, LevelRules } from "../../src/portal/types.ts";
+import type { RoomAction, RoomState, RoomEvent, RoomInfo, LevelRules, Cable } from "../../src/portal/types.ts";
 import { generateLevel } from "./generator.ts";
 
 const PUBLIC_PORTAL_KEY = process.env.PUBLIC_PORTAL_KEY ?? "";
@@ -22,7 +22,7 @@ interface Judge {
   room: ChannelHandle<RoomState | RoomEvent>;
   actions: ChannelHandle<RoomAction>;
   level: number;
-  cables: { label: string; color: number; position: [number, number, number]; rotation: [number, number, number] }[];
+  cables: Cable[];
   order: string[];
   rules: LevelRules;
   cutCount: number;
@@ -128,6 +128,8 @@ function bootJudge(roomId: string): void {
     const label = m.content.label;
     const expected = j.order[j.cutCount];
     if (label === expected) {
+      const c = j.cables.find((c) => c.label === label);
+      if (c) c.cut = true;
       j.cutCount++;
       if (j.cutCount === j.order.length) {
         j.level++;
