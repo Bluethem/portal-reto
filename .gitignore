@@ -148,3 +148,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Cloudflare local env (nunca subir)
+.dev.vars
+.wrangler/

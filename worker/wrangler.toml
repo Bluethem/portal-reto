@@ -1,0 +1,15 @@
+name = "cable-rush-judge"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[durable_objects]
+bindings = [
+  { name = "JUDGE", class_name = "JudgeDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["JudgeDO"]
