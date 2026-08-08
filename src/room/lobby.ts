@@ -5,6 +5,8 @@ import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 
 const REQUIRED_PLAYERS = 4;
+const ALIVE_INTERVAL_MS = 2000;
+const ALIVE_TIMEOUT_MS = 8000;
 
 export function bootRoom(roomId: string, isHost: boolean, roomName: string): void {
   const root = document.getElementById("app");
@@ -46,6 +48,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   let judgeAnnounced = false;
   let selfRole: Role | null = null;
   let cleanup: (() => void) | null = null;
+  const lastSeen = new Map<string, number>();
 
   function mountByRole(role: Role): void {
     const stage = document.getElementById("stage");
@@ -90,11 +93,26 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     });
   }
 
+  function applyJudge(judgeId: string): void {
+    judgeAnnounced = true;
+    selfRole = judgeId === client.getSelfId() ? "judge" : "cutter";
+    client.setMeta({ name: username, host: isHost, role: selfRole });
+    if (stateEl) stateEl.textContent = "Juez elegido. Esperando que el host inicie...";
+    if (startBtn) startBtn.disabled = client.getPlayers().length < REQUIRED_PLAYERS;
+  }
+
+  function applyStart(): void {
+    started = true;
+    mountByRole(selfRole ?? "cutter");
+    if (stateEl) stateEl.textContent = "¡Partida en curso!";
+  }
+
   function maybeAnnounceJudge(list: { id: string; name: string; host: boolean }[]): void {
     if (!isHost || announced) return;
     if (list.length !== REQUIRED_PLAYERS) return;
     announced = true;
     const judge = list[Math.floor(Math.random() * list.length)];
+    applyJudge(judge.id);
     void client.sendEvent({ type: "judge", judgeId: judge.id });
   }
 
@@ -103,6 +121,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   });
 
   client.subscribePresence((list) => {
+    for (const p of list) lastSeen.set(p.id, Date.now());
     renderPlayers(list);
     if (stateEl) {
       stateEl.textContent =
@@ -145,24 +164,16 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   });
 
   client.subscribeEvents((e) => {
-    if (e.type === "judge") {
-      judgeAnnounced = true;
-      const role: Role = e.judgeId === client.getSelfId() ? "judge" : "cutter";
-      selfRole = role;
-      client.setMeta({ name: username, host: isHost, role });
-      if (stateEl) stateEl.textContent = "Juez elegido. Esperando que el host inicie...";
-      if (startBtn) startBtn.disabled = client.getPlayers().length < REQUIRED_PLAYERS;
-    }
-    if (e.type === "start") {
-      started = true;
-      mountByRole(selfRole ?? "cutter");
-      if (stateEl) stateEl.textContent = "¡Partida en curso!";
-    }
+    if (e.type === "judge") applyJudge(e.judgeId);
+    if (e.type === "start") applyStart();
   });
 
   if (startBtn) {
     startBtn.addEventListener("click", () => {
-      if (judgeAnnounced) void client.sendEvent({ type: "start" });
+      if (judgeAnnounced) {
+        applyStart();
+        void client.sendEvent({ type: "start" });
+      }
     });
   }
 
@@ -178,5 +189,24 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     timerEl.textContent = `Timer: ${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
   });
 
-  window.addEventListener("beforeunload", () => client.release());
+  const aliveInterval = setInterval(() => client.sendAlive(), ALIVE_INTERVAL_MS);
+
+  const pruneInterval = setInterval(() => {
+    const now = Date.now();
+    const stale = [...lastSeen.entries()].filter(([, t]) => now - t > ALIVE_TIMEOUT_MS).map(([id]) => id);
+    if (stale.length === 0) return;
+    for (const id of stale) lastSeen.delete(id);
+    renderPlayers(client.getPlayers().filter((p) => lastSeen.has(p.id)));
+  }, 1000);
+
+  client.subscribeActivity((users) => {
+    const now = Date.now();
+    for (const id of users) lastSeen.set(id, now);
+  });
+
+  window.addEventListener("beforeunload", () => {
+    clearInterval(aliveInterval);
+    clearInterval(pruneInterval);
+    client.release();
+  });
 }

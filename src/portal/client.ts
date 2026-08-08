@@ -38,6 +38,8 @@ export interface RoomClient {
   sendCut(label: string): Promise<void>;
   subscribeCursor(cb: (c: CursorMessage) => void): () => void;
   sendCursor(x: number, y: number, name: string): void;
+  subscribeActivity(cb: (users: string[]) => void): () => void;
+  sendAlive(): void;
   setMeta(meta: PlayerMeta): void;
   sendEvent(e: RoomEvent): Promise<void>;
   sendChat(text: string, name: string): Promise<void>;
@@ -102,6 +104,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
   const chatListeners = new Set<(m: ChatEntry) => void>();
   const cursorListeners = new Set<(c: CursorMessage) => void>();
   const stateListeners = new Set<(s: RoomState | null) => void>();
+  const activityListeners = new Set<(users: string[]) => void>();
 
   function chatHistory(): ChatEntry[] {
     return room
@@ -143,6 +146,9 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     emit();
   });
   room.on("presence", emit);
+  room.on("activity", () => {
+    for (const cb of activityListeners) cb(activityUsers());
+  });
   room.on("message", (m) => {
     const content = m.content;
     if ("type" in content && content.type === "chat") {
@@ -158,6 +164,10 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     }
   });
   room.subscribe(emit);
+
+  function activityUsers(): string[] {
+    return room.getSnapshot().activity.map((a) => a.userId);
+  }
 
   const index: ChannelHandle<RoomInfo> = portal.channel<RoomInfo>(INDEX_ID, { history: 50 });
 
@@ -207,6 +217,14 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     },
     sendCursor: (x, y, name) => {
       void room.send({ content: { type: "cursor", x, y, name } as CursorMessage, ephemeral: true });
+    },
+    subscribeActivity: (cb) => {
+      activityListeners.add(cb);
+      cb(activityUsers());
+      return () => activityListeners.delete(cb);
+    },
+    sendAlive: () => {
+      room.sendActivity("alive");
     },
     setMeta: (m) => room.setMetadata(m as unknown as Record<string, unknown>),
     sendEvent: async (e) => {
