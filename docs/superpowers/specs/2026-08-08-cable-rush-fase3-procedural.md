@@ -25,17 +25,21 @@ Cada regla es una restricción sobre el orden de corte. Las referencias siempre
 resuelven a UN cable: labels únicos, colores únicos por nivel (sin repetidos),
 filas únicas.
 
-| Regla | Significado | Ejemplo (manual) |
+| Regla | Significado | Ejemplo (manual, por colores) |
 |---|---|---|
-| `first(l)` | l primero | "El cable A se corta PRIMERO." |
-| `last(l)` | l último | "El cable C se corta al FINAL." |
-| `at(l, k)` | l en posición k | "El cable B va en SEGUNDO lugar." |
-| `before(a, b)` | a antes que b | "El cable A se corta ANTES que el B." |
-| `adjacent(a, b)` | b justo después de a | "Justo después de A, corta B." |
-| `notFirst(l)` | l no es el primero | "El cable D NO es el primero." |
+| `first(l)` | l primero | "El cable rojo se corta PRIMERO." |
+| `last(l)` | l último | "El cable azul se corta al FINAL." |
+| `at(l, k)` | l en posición k | "El cable verde va en SEGUNDO lugar." |
+| `before(a, b)` | a antes que b | "El cable amarillo se corta ANTES que el morado." |
+| `adjacent(a, b)` | b justo después de a | "Justo después de cortar el rojo, corta el naranja." |
+| `notFirst(l)` | l no es el primero | "El cable verde NO es el primero." |
 | `colorFirst(c)` | el cable de color c primero | "El cable rojo se corta PRIMERO." |
 | `colorBefore(c1, c2)` | c1 antes que c2 | "El rojo se corta ANTES que el azul." |
 | `rowEnd(top/bottom, first/last)` | fila arriba/abajo | "El cable de ARRIBA se corta al FINAL." |
+
+Los cables se identifican **solo por color** (únicos por nivel): no hay letras en el
+tablero. Las reglas de etiqueta se renderizan con el color del cable; `label` queda
+interno (solver/orden del agente).
 
 Todas las reglas son **conjunción** (se cumplen TODAS). Las disyuntivas tipo
 "si no" quedan para una iteración posterior.
@@ -86,8 +90,9 @@ generador puede añadir más reglas de las target si hacen falta para la unicida
   inversiones de la permutación derecha.
 - Rampa suave: `targetCrossings = min(1 + floor((level-3)/2), n(n-1)/2)` para
   `level >= 3` (niveles 1-2 horizontales, +1 cruce cada ~2 niveles).
-- El tablero dibuja la diagonal y el badge en el punto medio; en un cruce el cable
-  dibujado después queda encima (clic al segmento visible = la complicación).
+- El tablero dibuja la diagonal (sin letra central; los cables se identifican por
+  color); en un cruce el cable dibujado después queda encima (clic al segmento
+  visible = la complicación).
 
 ## 9. Corte optimista (feedback al instante)
 
@@ -96,14 +101,22 @@ generador puede añadir más reglas de las target si hacen falta para la unicida
   fade) con un set `pendingCuts` (timeout ~1.5 s).
 - El agente reconcilia: corte correcto → queda cortado; incorrecto → el siguiente
   estado lo restaura (y aplica -15 s).
-- Se reduce la inundación HTTP de cursores: throttle ~300 ms + umbral de movimiento
-  (~0.008) → el mouse quieto no publica, aliviando la latencia de los cortes.
+
+## 9b. Cursores fluidos
+
+- Los cursores viajan por `room-<id>-actions` (no por la room) → el canal de estado
+  queda limpio, sin escaneos O(n) ni re-renders cruzados.
+- Throttle ~120 ms + umbral de movimiento (~0.004) → el mouse quieto no publica.
+- **Smoothing del receptor**: transición `left/top 120ms linear` en
+  `.cursor-dot`/`.cursor-name` con render **in-place** (los elementos no se recrean)
+  → el cursor glisse entre posiciones.
+- `setMetadata` (vía del guide live-cursors) **no propaga en SDK 0.1.5** → descartado.
 
 ## 10. Verificación
 
 - `npx astro check` 0 errores.
 - Script de validación headless: niveles 1..30 con varios seeds → solver = 1,
-  reglas verdaderas para el orden conocido, `row`/`toRow` permutaciones y
-  cruces ≥ target por nivel.
-- Test 4 jugadores en dev: manual con reglas condicionales, deducción, corte
-  instantáneo, cables diagonales que se cruzan.
+  reglas verdaderas para el orden conocido, `row`/`toRow` permutaciones,
+  cruces ≥ target por nivel y frases del manual **sin letras A-F** (color-only).
+- Test 4 jugadores en dev: manual con reglas condicionales por colores, deducción,
+  corte instantáneo, cables diagonales que se cruzan, cursores fluidos.

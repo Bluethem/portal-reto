@@ -8,8 +8,8 @@ const PANEL_X = 46;
 const PANEL_Y = 26;
 const PANEL_H = VIEW_H - PANEL_Y * 2;
 const TERMINAL_X_R = PANEL_X + PANEL_W;
-const CURSOR_THROTTLE_MS = 300;
-const CURSOR_MOVE_EPS = 0.008;
+const CURSOR_THROTTLE_MS = 120;
+const CURSOR_MOVE_EPS = 0.004;
 const PENDING_CUT_MS = 1500;
 
 interface CableEls {
@@ -17,8 +17,6 @@ interface CableEls {
   line: SVGLineElement;
   stripe: SVGLineElement;
   hit: SVGLineElement;
-  badge: SVGCircleElement;
-  text: SVGTextElement;
   row: number;
   toRow: number;
 }
@@ -69,18 +67,12 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     const x2 = VIEW_W - TERMINAL_X_R;
     const y1 = rowY(els.row, total);
     const y2 = rowY(els.toRow, total);
-    const cx = VIEW_W / 2;
-    const cy = (y1 + y2) / 2;
     for (const el of [els.line, els.stripe, els.hit]) {
       el.setAttribute("x1", String(x1));
       el.setAttribute("y1", String(y1));
       el.setAttribute("x2", String(x2));
       el.setAttribute("y2", String(y2));
     }
-    els.badge.setAttribute("cx", String(cx));
-    els.badge.setAttribute("cy", String(cy));
-    els.text.setAttribute("x", String(cx));
-    els.text.setAttribute("y", String(cy + 6));
   }
 
   function applyCutLook(els: CableEls): void {
@@ -108,7 +100,6 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       els.hit.style.pointerEvents = "stroke";
       els.line.removeAttribute("stroke-dasharray");
       els.line.setAttribute("stroke", hex(c.color));
-      els.badge.setAttribute("stroke", hex(c.color));
       els.g.setAttribute("style", "opacity:1;transition:none;");
       els.row = c.row;
       els.toRow = c.toRow;
@@ -136,12 +127,9 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
         style: "cursor:pointer;",
       });
       hit.style.pointerEvents = "stroke";
-      const badge = svgEl(NS, "circle", { cx: String(VIEW_W / 2), cy: "0", r: "16", fill: "#0b0e14", stroke: hex(c.color), "stroke-width": "3", style: "pointer-events:none;" });
-      const text = svgEl(NS, "text", { x: String(VIEW_W / 2), y: "6", "text-anchor": "middle", "font-size": "18", "font-weight": "700", fill: "#e6e9f0", "font-family": "system-ui, sans-serif", style: "pointer-events:none;" });
-      text.textContent = c.label;
-      g.append(line, stripe, hit, badge, text);
+      g.append(line, stripe, hit);
 
-      const els: CableEls = { g, line, stripe, hit, badge, text, row: c.row, toRow: c.toRow };
+      const els: CableEls = { g, line, stripe, hit, row: c.row, toRow: c.toRow };
       placeCable(els, total);
 
       hit.addEventListener("pointerdown", () => {
@@ -159,24 +147,35 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   }
 
   const cursors = new Map<string, { x: number; y: number; name: string }>();
+  const cursorEls = new Map<string, { dot: HTMLElement; label: HTMLElement }>();
 
   function renderCursors(): void {
-    cursorLayer.replaceChildren();
-    for (const c of cursors.values()) {
+    for (const [userId, c] of cursors) {
+      let el = cursorEls.get(userId);
+      if (!el) {
+        const dot = document.createElement("div");
+        dot.className = "cursor-dot";
+        const label = document.createElement("div");
+        label.className = "cursor-name";
+        cursorLayer.append(dot, label);
+        el = { dot, label };
+        cursorEls.set(userId, el);
+      }
       const color = `#${nameColor(c.name).toString(16).padStart(6, "0")}`;
-      const dot = document.createElement("div");
-      dot.className = "cursor-dot";
-      dot.style.left = `${c.x * 100}%`;
-      dot.style.top = `${c.y * 100}%`;
-      dot.style.borderColor = color;
-      dot.style.background = color;
-      const label = document.createElement("div");
-      label.className = "cursor-name";
-      label.style.left = `${c.x * 100}%`;
-      label.style.top = `${c.y * 100}%`;
-      label.style.background = color;
-      label.textContent = c.name;
-      cursorLayer.append(dot, label);
+      el.dot.style.left = `${c.x * 100}%`;
+      el.dot.style.top = `${c.y * 100}%`;
+      el.dot.style.borderColor = color;
+      el.dot.style.background = color;
+      el.label.style.left = `${c.x * 100}%`;
+      el.label.style.top = `${c.y * 100}%`;
+      el.label.style.background = color;
+      el.label.textContent = c.name;
+    }
+    for (const [userId, el] of cursorEls) {
+      if (cursors.has(userId)) continue;
+      el.dot.remove();
+      el.label.remove();
+      cursorEls.delete(userId);
     }
   }
 

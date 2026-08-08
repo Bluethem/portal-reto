@@ -93,7 +93,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     `room-${roomId}`,
     { history: 500, metadata: meta as unknown as Record<string, unknown> }
   );
-  const actions: ChannelHandle<RoomAction> = portal.channel<RoomAction>(`room-${roomId}-actions`, {
+  const actions: ChannelHandle<RoomAction | CursorMessage> = portal.channel<RoomAction | CursorMessage>(`room-${roomId}-actions`, {
     history: 20,
   });
   room.acquire();
@@ -164,15 +164,18 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
   });
   room.on("message", (m) => {
     const content = m.content;
-    if ("type" in content && content.type === "cursor") {
-      for (const cb of cursorListeners) cb(content);
-      return;
-    }
     if ("type" in content) {
       for (const cb of eventListeners) cb(content as RoomEvent);
     }
   });
   room.subscribe(emit);
+
+  actions.on("message", (m) => {
+    const content = m.content;
+    if ("type" in content && content.type === "cursor") {
+      for (const cb of cursorListeners) cb(content);
+    }
+  });
 
   function activityUsers(): string[] {
     return room.getSnapshot().activity.map((a) => a.userId);
@@ -225,7 +228,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       return () => cursorListeners.delete(cb);
     },
     sendCursor: (x, y, name, userId) => {
-      void room.send({ content: { type: "cursor", x, y, name, userId } as CursorMessage });
+      void actions.send({ content: { type: "cursor", x, y, name, userId } as CursorMessage });
     },
     subscribeActivity: (cb) => {
       activityListeners.add(cb);

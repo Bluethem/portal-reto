@@ -294,20 +294,20 @@ function tryGenerate(level: number, seed: number): GeneratedLevel | null {
 
 const ORDINALS = ["primer", "segundo", "tercer", "cuarto", "quinto", "sexto"];
 
-function ruleSentence(rule: Rule): string {
+function ruleSentence(rule: Rule, colorOf: (label: string) => string): string {
   switch (rule.kind) {
     case "first":
-      return `El cable ${rule.label} se corta PRIMERO.`;
+      return `El cable ${colorOf(rule.label)} se corta PRIMERO.`;
     case "last":
-      return `El cable ${rule.label} se corta al FINAL.`;
+      return `El cable ${colorOf(rule.label)} se corta al FINAL.`;
     case "at":
-      return `El cable ${rule.label} va en ${ORDINALS[rule.pos] ?? "siguiente"} lugar.`;
+      return `El cable ${colorOf(rule.label)} va en ${ORDINALS[rule.pos] ?? "siguiente"} lugar.`;
     case "before":
-      return `El cable ${rule.a} se corta ANTES que el ${rule.b}.`;
+      return `El cable ${colorOf(rule.a)} se corta ANTES que el ${colorOf(rule.b)}.`;
     case "adjacent":
-      return `Justo después de cortar el ${rule.a}, corta el ${rule.b}.`;
+      return `Justo después de cortar el ${colorOf(rule.a)}, corta el ${colorOf(rule.b)}.`;
     case "notFirst":
-      return `El cable ${rule.label} NO es el primero en cortarse.`;
+      return `El cable ${colorOf(rule.label)} NO es el primero en cortarse.`;
     case "colorFirst":
       return `El cable ${colorName(rule.color)} se corta PRIMERO.`;
     case "colorBefore":
@@ -323,9 +323,14 @@ function ruleSentence(rule: Rule): string {
 }
 
 function renderRules(level: number, cables: Cable[], rules: Rule[]): LevelRules {
+  const byLabel = new Map(cables.map((c) => [c.label, c] as const));
+  const colorOf = (label: string): string => {
+    const c = byLabel.get(label);
+    return c ? colorName(c.color) : label;
+  };
   return {
     summary: `Nivel ${level}: hay ${cables.length} cables. Aplica TODAS las reglas para deducir el orden de corte.`,
-    steps: rules.map((r) => ruleSentence(r)),
+    steps: rules.map((r) => ruleSentence(r, colorOf)),
   };
 }
 
@@ -359,8 +364,8 @@ function fallbackLevel(level: number, seed: number): GeneratedLevel {
     rules: {
       summary: `Nivel ${level}: hay ${count} cables. Corta TODOS los cables en el orden correcto.`,
       steps: [
-        `El PRIMER cable en cortarse es el ${order[0]} (color ${colorName(colorPool[0])}).`,
-        ...cables.slice(1).map((c) => `Después, corta el cable ${c.label} (color ${colorName(c.color)}).`),
+        `El PRIMER cable en cortarse es el ${colorName(colorPool[0])}.`,
+        ...cables.slice(1).map((c) => `Después, corta el ${colorName(c.color)}.`),
       ],
     },
     structured: [],

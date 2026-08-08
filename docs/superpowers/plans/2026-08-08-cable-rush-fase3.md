@@ -78,3 +78,15 @@ y dificultad creciente.
 - [x] `npx astro check` 0 errores; build OK.
 - [x] Validación extendida: `row`/`toRow` permutaciones, cruces ≥ target,
       solver === 1.
+
+### Task 9: Cursores fluidos + manual por colores
+
+- [x] `client.ts`: cursores al canal `room-<id>-actions` (envío y recepción);
+      el canal de la room queda limpio.
+- [x] `board.ts`: `renderCursors` in-place (sin recrear elementos), throttle
+      120 ms, umbral 0.004; se eliminan el badge/letra central (solo colores).
+- [x] `theme.css`: transición `left/top 120ms linear` en cursor-dot/name.
+- [x] `generator.ts`: manual renderizado por color del cable (`colorOf(label)`),
+      incluyendo el fallback; `label` interno intacto.
+- [x] `npx astro check` 0 errores; build OK.
+- [x] Validación: frases del manual sin letras A-F; solver === 1; cruces ≥ target.

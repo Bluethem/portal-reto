@@ -104,6 +104,7 @@
     border-radius: 9999px;
     border: 2px solid;
     box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+    transition: left 120ms linear, top 120ms linear;
   }
   .cursor-name {
     position: absolute;
@@ -116,5 +117,6 @@
     border-radius: 6px;
     white-space: nowrap;
     box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+    transition: left 120ms linear, top 120ms linear;
   }
 }
