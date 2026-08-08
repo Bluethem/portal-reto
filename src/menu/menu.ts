@@ -131,7 +131,9 @@ function renderRooms(root: HTMLElement, menu: ReturnType<typeof createMenuClient
   joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const code = joinCode.value.trim().toUpperCase();
-    if (code) window.location.href = `/room?id=${encodeURIComponent(`prv-${code}`)}`;
+    if (!code) return;
+    const match = menu.getRooms().find((r) => r.id.toUpperCase().endsWith(`-${code}`));
+    window.location.href = `/room?id=${encodeURIComponent(match ? match.id : `prv-${code}`)}`;
   });
 
   const statusEl = document.getElementById("rooms-status");

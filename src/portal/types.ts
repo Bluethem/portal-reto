@@ -18,7 +18,8 @@ export interface RoomInfo {
 
 export type RoomEvent =
   | { type: "judge"; judgeId: string }
-  | { type: "start" };
+  | { type: "start" }
+  | { type: "leave"; userId: string };
 
 export interface ChatMessage {
   type: "chat";
@@ -30,6 +31,8 @@ export interface ChatEntry {
   id: string;
   name: string;
   text: string;
+  self: boolean;
+  status: "pending" | "sent" | "failed";
 }
 
 export interface Cable {

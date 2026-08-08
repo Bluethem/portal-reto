@@ -1,12 +1,12 @@
 import { joinRoom } from "../portal/client";
-import type { Role } from "../portal/types";
+import type { ChatEntry, Role } from "../portal/types";
 import { getUsername } from "../shared/username";
 import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 
 const REQUIRED_PLAYERS = 4;
-const ALIVE_INTERVAL_MS = 2000;
-const ALIVE_TIMEOUT_MS = 8000;
+const ALIVE_INTERVAL_MS = 1000;
+const ALIVE_TIMEOUT_MS = 3000;
 
 export function bootRoom(roomId: string, isHost: boolean, roomName: string): void {
   const root = document.getElementById("app");
@@ -19,11 +19,18 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     <div class="min-h-screen flex flex-col">
       <header class="bg-slate-gray w-full flex-none">
         <div class="flex items-center justify-between w-full px-10 py-2 max-w-[1200px] mx-auto h-16">
-          <div class="flex items-center gap-10 min-w-0">
+          <div class="flex items-center gap-4 min-w-0">
             <span class="text-heading-sm font-extrabold text-sunbeam-yellow lowercase shrink-0">cable rush</span>
             <span id="room-id" class="text-body-sm text-paper-white truncate">Operación: ${escapeHtml(roomName)}</span>
+            <span class="flex items-center gap-1 bg-paper-white/10 rounded-full px-3 py-1 shrink-0">
+              <span class="material-symbols-outlined text-[16px] text-sunbeam-yellow">key</span>
+              <span id="room-code" class="text-body-sm font-bold text-sunbeam-yellow tracking-widest">--</span>
+              <button id="copy-code" type="button" title="Copiar código" class="text-paper-white hover:text-sunbeam-yellow transition-colors">
+                <span class="material-symbols-outlined text-[16px]">content_copy</span>
+              </button>
+            </span>
           </div>
-          <a href="/" class="text-body-sm text-paper-white hover:text-sunbeam-yellow transition-colors flex items-center gap-2 shrink-0">
+          <a id="leave-btn" href="/" class="text-body-sm text-paper-white hover:text-sunbeam-yellow transition-colors flex items-center gap-2 shrink-0">
             <span class="material-symbols-outlined text-[18px]">logout</span> Salir
           </a>
         </div>
@@ -42,6 +49,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
             <div id="stage"></div>
             <div id="comms" class="bg-sand rounded-[16px] rounded-bl-none p-6 relative">
               <h3 class="text-heading-sm text-carbon font-bold mb-2">Comms tácticas</h3>
+              <p id="chat-error" class="hidden text-body-sm text-error font-bold mb-2"></p>
               <div id="chat-log" class="space-y-3 max-h-56 overflow-y-auto"></div>
               <form id="chat-form" class="mt-6 relative">
                 <input
@@ -103,10 +111,30 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   const startHintEl = document.getElementById("start-hint");
   const chatLogEl = document.getElementById("chat-log");
+  const chatErrorEl = document.getElementById("chat-error");
   const chatForm = document.getElementById("chat-form");
   const chatInput = document.getElementById("chat-input") as HTMLInputElement | null;
   const gameoverEl = document.getElementById("gameover");
   const goLevelEl = document.getElementById("go-level");
+  const roomCodeEl = document.getElementById("room-code");
+  const copyBtn = document.getElementById("copy-code");
+  const leaveBtn = document.getElementById("leave-btn");
+
+  const code = roomId.slice(roomId.indexOf("-") + 1);
+  if (roomCodeEl) roomCodeEl.textContent = code;
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      void copyRoomCode(copyBtn, code);
+    });
+  }
+
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", () => {
+      const sid = client.getSelfId();
+      if (sid) client.sendLeave(sid);
+    });
+  }
 
   let announced = false;
   let judgeAnnounced = false;
@@ -115,6 +143,10 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   let selfRole: Role | null = null;
   let cleanup: (() => void) | null = null;
   const lastSeen = new Map<string, number>();
+
+  function activePlayers(): { id: string; name: string; host: boolean }[] {
+    return client.getPlayers().filter((p) => lastSeen.has(p.id));
+  }
 
   function mountByRole(role: Role): void {
     const stage = document.getElementById("stage");
@@ -168,19 +200,24 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     if (squadCountEl) squadCountEl.textContent = `${list.length} / 4`;
   }
 
-  const chatById = new Map<string, { name: string; text: string }>();
+  let chatErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function renderChat(): void {
+  function renderChat(entries: ChatEntry[]): void {
     if (!chatLogEl) return;
     chatLogEl.replaceChildren();
-    for (const { name, text } of chatById.values()) {
+    for (const { name, text, self, status } of entries) {
+      const pending = status === "pending";
+      const failed = status === "failed";
       const row = document.createElement("div");
-      row.className = "flex gap-4 items-start";
+      row.className = `flex gap-4 items-start ${self ? "justify-end" : ""} ${pending || failed ? "opacity-60" : ""}`;
       const who = document.createElement("span");
-      who.className = "font-bold text-electric-violet shrink-0";
-      who.textContent = `${name}:`;
+      who.className = `font-bold shrink-0 ${self ? "text-carbon" : "text-electric-violet"}`;
+      who.textContent = self ? "Tú:" : `${name}:`;
       const msg = document.createElement("p");
-      msg.className = "text-body-sm text-carbon";
+      msg.className = self
+        ? "text-body-sm text-carbon bg-surface-high rounded-card px-3 py-1"
+        : "text-body-sm text-carbon";
+      if (failed) msg.classList.add("text-error");
       msg.textContent = text;
       row.append(who, msg);
       chatLogEl.appendChild(row);
@@ -188,13 +225,26 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     chatLogEl.scrollTop = chatLogEl.scrollHeight;
   }
 
+  function showChatError(message: string): void {
+    if (!chatErrorEl) return;
+    chatErrorEl.textContent = message;
+    chatErrorEl.classList.remove("hidden");
+    if (chatErrorTimer) clearTimeout(chatErrorTimer);
+    chatErrorTimer = setTimeout(() => {
+      chatErrorEl?.classList.add("hidden");
+    }, 3000);
+  }
+
   if (chatForm && chatInput) {
     chatForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const text = chatInput.value.trim();
       if (!text) return;
-      void client.sendChat(text, username);
       chatInput.value = "";
+      void client.sendChat(text, username).catch(() => {
+        chatInput.value = text;
+        showChatError("Mensaje no enviado. Inténtalo de nuevo.");
+      });
     });
   }
 
@@ -204,7 +254,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       statusEl.textContent = "¡Partida en curso!";
       return;
     }
-    const count = client.getPlayers().length;
+    const count = activePlayers().length;
     if (count >= REQUIRED_PLAYERS && judgeId) {
       statusEl.textContent = "Juez elegido. Esperando que el host inicie...";
     } else if (count >= REQUIRED_PLAYERS) {
@@ -215,7 +265,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   }
 
   function updateStartArea(): void {
-    const count = client.getPlayers().length;
+    const count = activePlayers().length;
     const full = count >= REQUIRED_PLAYERS;
     if (!startBtn) return;
     if (!isHost) {
@@ -252,11 +302,12 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     updateLobbyBanner();
   }
 
-  function maybeAnnounceJudge(list: { id: string; name: string; host: boolean }[]): void {
+  function maybeAnnounceJudge(): void {
     if (!isHost || announced) return;
-    if (list.length !== REQUIRED_PLAYERS) return;
+    const players = activePlayers();
+    if (players.length !== REQUIRED_PLAYERS) return;
     announced = true;
-    const judge = list[Math.floor(Math.random() * list.length)];
+    const judge = players[Math.floor(Math.random() * players.length)];
     applyJudge(judge.id);
     void client.sendEvent({ type: "judge", judgeId: judge.id });
   }
@@ -270,12 +321,12 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     renderPlayers(list);
     updateLobbyBanner();
     updateStartArea();
-    maybeAnnounceJudge(list);
+    maybeAnnounceJudge();
     if (isHost) publish();
   });
 
   function publish(): void {
-    const list = client.getPlayers();
+    const list = activePlayers();
     void client.publishRoom({
       id: roomId,
       name: roomName,
@@ -293,18 +344,27 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     window.addEventListener("beforeunload", () => clearInterval(interval));
   }
 
-  client.subscribeChat((m) => {
-    if (chatById.has(m.id)) return;
-    chatById.set(m.id, { name: m.name, text: m.text });
-    renderChat();
+  let lastChatKey = "";
+  client.subscribeChat((entries) => {
+    const key = entries.map((e) => e.id).join("\0");
+    if (key === lastChatKey) return;
+    lastChatKey = key;
+    renderChat(entries);
   });
 
   client.subscribeEvents((e) => {
     if (e.type === "judge") {
       applyJudge(e.judgeId);
-      renderPlayers(client.getPlayers());
+      renderPlayers(activePlayers());
     }
     if (e.type === "start") applyStart();
+    if (e.type === "leave") {
+      lastSeen.delete(e.userId);
+      renderPlayers(activePlayers());
+      updateLobbyBanner();
+      updateStartArea();
+      if (isHost) publish();
+    }
   });
 
   if (startBtn) {
@@ -344,7 +404,10 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     const stale = [...lastSeen.entries()].filter(([, t]) => now - t > ALIVE_TIMEOUT_MS).map(([id]) => id);
     if (stale.length === 0) return;
     for (const id of stale) lastSeen.delete(id);
-    renderPlayers(client.getPlayers().filter((p) => lastSeen.has(p.id)));
+    renderPlayers(activePlayers());
+    updateLobbyBanner();
+    updateStartArea();
+    if (isHost) publish();
   }, 1000);
 
   client.subscribeActivity((users) => {
@@ -353,6 +416,8 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   });
 
   window.addEventListener("beforeunload", () => {
+    const sid = client.getSelfId();
+    if (sid) client.sendLeave(sid);
     clearInterval(aliveInterval);
     clearInterval(pruneInterval);
     client.release();
@@ -363,4 +428,23 @@ function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+async function copyRoomCode(btn: HTMLElement, code: string): Promise<void> {
+  const icon = btn.firstElementChild as HTMLElement | null;
+  const prev = icon?.innerHTML ?? "";
+  try {
+    await navigator.clipboard.writeText(code);
+  } catch {
+    const input = document.createElement("input");
+    input.value = code;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+  if (icon) icon.innerHTML = "check";
+  setTimeout(() => {
+    if (icon) icon.innerHTML = prev;
+  }, 1500);
 }

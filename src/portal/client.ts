@@ -23,6 +23,7 @@ export interface MenuClient {
   getChannelStatus(): ChannelStatus;
   subscribeStatus(cb: (s: ChannelStatus) => void): () => void;
   subscribeRooms(cb: (rooms: RoomInfo[]) => void): () => void;
+  getRooms(): RoomInfo[];
 }
 
 export interface RoomClient {
@@ -32,7 +33,7 @@ export interface RoomClient {
   subscribeStatus(cb: (s: ChannelStatus) => void): () => void;
   subscribePresence(cb: (players: { id: string; name: string; host: boolean }[]) => void): () => void;
   subscribeEvents(cb: (e: RoomEvent) => void): () => void;
-  subscribeChat(cb: (m: ChatEntry) => void): () => void;
+  subscribeChat(cb: (entries: ChatEntry[]) => void): () => void;
   subscribeState(cb: (s: RoomState | null) => void): () => void;
   getState(): RoomState | null;
   sendCut(label: string): Promise<void>;
@@ -40,6 +41,7 @@ export interface RoomClient {
   sendCursor(x: number, y: number, name: string): void;
   subscribeActivity(cb: (users: string[]) => void): () => void;
   sendAlive(): void;
+  sendLeave(userId: string): void;
   setMeta(meta: PlayerMeta): void;
   sendEvent(e: RoomEvent): Promise<void>;
   sendChat(text: string, name: string): Promise<void>;
@@ -83,6 +85,7 @@ export function createMenuClient(): MenuClient {
       cb(roomsFromSnapshot(index.getSnapshot()));
       return () => roomsListeners.delete(cb);
     },
+    getRooms: () => roomsFromSnapshot(index.getSnapshot()),
   };
 }
 
@@ -101,7 +104,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
   const statusListeners = new Set<(s: ChannelStatus) => void>();
   const presenceListeners = new Set<(p: { id: string; name: string; host: boolean }[]) => void>();
   const eventListeners = new Set<(e: RoomEvent) => void>();
-  const chatListeners = new Set<(m: ChatEntry) => void>();
+  const chatListeners = new Set<(entries: ChatEntry[]) => void>();
   const cursorListeners = new Set<(c: CursorMessage) => void>();
   const stateListeners = new Set<(s: RoomState | null) => void>();
   const activityListeners = new Set<(users: string[]) => void>();
@@ -111,16 +114,28 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       .getSnapshot()
       .messages.filter(
         (m): m is typeof m & { content: ChatMessage } =>
-          "type" in m.content && m.content.type === "chat" && m.status !== "pending"
+          "type" in m.content && m.content.type === "chat"
       )
-      .map((m) => ({ id: m.id, name: m.content.name, text: m.content.text }));
+      .map((m) => ({
+        id: m.id,
+        name: m.content.name,
+        text: m.content.text,
+        self: m.sender.id === selfId,
+        status: m.status,
+      }));
   }
 
   function players(): { id: string; name: string; host: boolean }[] {
     const p = room.getSnapshot().presence as DetailedPresence | undefined;
     if (!p || p.kind !== "detailed") return [];
+    const seen = new Set<string>();
     return p.participants
       .filter((x) => x.metadata?.kind !== "agent")
+      .filter((x) => {
+        if (seen.has(x.id)) return false;
+        seen.add(x.id);
+        return true;
+      })
       .map((x) => ({
         id: x.id,
         name: (x.metadata?.name as string | undefined) ?? "?",
@@ -132,9 +147,8 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     const snap = room.getSnapshot();
     for (const cb of statusListeners) cb(snap.status);
     for (const cb of presenceListeners) cb(players());
-    for (const cb of chatListeners) {
-      for (const m of chatHistory()) cb(m);
-    }
+    const chat = chatHistory();
+    for (const cb of chatListeners) cb(chat);
     const last = [...snap.messages].reverse().find((m) => "status" in m.content) as
       | { content: RoomState }
       | undefined;
@@ -151,10 +165,6 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
   });
   room.on("message", (m) => {
     const content = m.content;
-    if ("type" in content && content.type === "chat") {
-      for (const cb of chatListeners) cb({ id: m.id, name: content.name, text: content.text });
-      return;
-    }
     if ("type" in content && content.type === "cursor") {
       for (const cb of cursorListeners) cb(content);
       return;
@@ -191,7 +201,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     },
     subscribeChat: (cb) => {
       chatListeners.add(cb);
-      for (const m of chatHistory()) cb(m);
+      cb(chatHistory());
       return () => chatListeners.delete(cb);
     },
     subscribeState: (cb) => {
@@ -234,6 +244,9 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       await room.send({
         content: { type: "chat", text, name },
       });
+    },
+    sendLeave: (userId) => {
+      void room.send({ ephemeral: true, content: { type: "leave", userId } as RoomEvent });
     },
     publishRoom: async (info) => {
       index.acquire();
