@@ -57,11 +57,6 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
                   <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">mic</span> Sonido</span>
                   <span id="mic-state" class="font-bold text-electric-violet">ACTIVO</span>
                 </button>
-                <div id="voice-debug" class="hidden mt-3 text-caption text-slate-gray space-y-1 border-t border-outline-variant pt-2">
-                  <p>Mic nivel: <span id="dbg-mic">--</span></p>
-                  <p>Otras voces: <span id="dbg-remotes">0</span> · adjuntos: <span id="dbg-attached">0</span></p>
-                  <p>Estado: <span id="dbg-state">--</span></p>
-                </div>
               </div>
             </div>
             <a id="leave-btn" href="/" class="text-body-sm text-paper-white hover:text-sunbeam-yellow transition-colors flex items-center gap-2 shrink-0">
@@ -180,11 +175,6 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   const deafenBtn = document.getElementById("deafen-btn");
   const deafenIconEl = document.getElementById("deafen-icon");
   const voiceStatusEl = document.getElementById("voice-status");
-  const voiceDebugEl = document.getElementById("voice-debug");
-  const dbgMicEl = document.getElementById("dbg-mic");
-  const dbgRemotesEl = document.getElementById("dbg-remotes");
-  const dbgAttachedEl = document.getElementById("dbg-attached");
-  const dbgStateEl = document.getElementById("dbg-state");
 
   const code = roomId.slice(roomId.indexOf("-") + 1);
   if (roomCodeEl) roomCodeEl.textContent = code;
@@ -298,18 +288,6 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     }
   });
   refreshAudio();
-
-  const debugTimer = setInterval(() => {
-    if (!voiceDebugEl) return;
-    const snap = voice.getDebugSnapshot();
-    const total = snap.remotes.reduce((s, r) => s + r.audioPubs, 0);
-    const attached = snap.remotes.reduce((s, r) => s + r.attached, 0);
-    if (dbgMicEl) dbgMicEl.textContent = String(Math.round(snap.micLevel * 100));
-    if (dbgRemotesEl) dbgRemotesEl.textContent = String(total);
-    if (dbgAttachedEl) dbgAttachedEl.textContent = String(attached);
-    if (dbgStateEl) dbgStateEl.textContent = String(snap.state);
-    voiceDebugEl.classList.toggle("hidden", voice.getStatus() !== "connected");
-  }, 1000);
 
   let announced = false;
   let judgeAnnounced = false;
@@ -720,7 +698,6 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   window.addEventListener("beforeunload", () => {
     clearInterval(aliveInterval);
     clearInterval(pruneInterval);
-    clearInterval(debugTimer);
     voice.dispose();
     client.release();
   });
