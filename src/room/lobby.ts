@@ -192,6 +192,8 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       voiceStatusEl.textContent = "Voz no disponible";
     } else if (s === "connecting") {
       voiceStatusEl.textContent = "Conectando...";
+    } else if (s === "connected" && voice.getPlayback() === "blocked") {
+      voiceStatusEl.textContent = "Clic para activar el audio";
     } else if (s === "connected") {
       voiceStatusEl.textContent = "Conectado";
     } else {
@@ -231,6 +233,10 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       if (!ok) {
         micMuted = !micMuted;
         refreshAudio();
+        if (voiceStatusEl) {
+          voiceStatusEl.textContent = "Permiso de micrófono denegado";
+          window.setTimeout(() => updateVoiceStatusUI(), 4000);
+        }
       }
     });
   }
@@ -243,7 +249,25 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     });
   }
 
-  voice.subscribeStatus(updateVoiceStatusUI);
+  let audioUnlocked = false;
+  function unlockAudio(): void {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    void voice.startAudio();
+  }
+
+  voice.subscribeStatus((s) => {
+    updateVoiceStatusUI();
+    if (s === "connected") {
+      window.addEventListener("pointerdown", unlockAudio, { once: true });
+      window.addEventListener("click", unlockAudio, { once: true });
+    }
+  });
+  voice.subscribePlayback(updateVoiceStatusUI);
+  voice.subscribeMic((on) => {
+    micMuted = !on;
+    refreshAudio();
+  });
   voice.subscribeSpeakers((ids) => {
     speakingIds = new Set(ids);
     for (const [id, dot] of speakingDotEls) {
