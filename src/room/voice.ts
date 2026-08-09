@@ -1,4 +1,5 @@
 import { Room, RoomEvent, Track } from "livekit-client";
+import type { RemoteAudioTrack, RemoteParticipant } from "livekit-client";
 
 export type VoiceStatus = "offline" | "connecting" | "connected" | "error";
 export type VoicePlayback = "unknown" | "blocked" | "playing";
@@ -12,6 +13,7 @@ export class VoiceChannel {
   private playback: VoicePlayback = "unknown";
   private micOn = false;
   private deafened = false;
+  private userAudio = new Map<string, { volume: number; muted: boolean }>();
   private disposed = false;
   private statusListeners = new Set<(s: VoiceStatus) => void>();
   private playbackListeners = new Set<(p: VoicePlayback) => void>();
@@ -101,10 +103,12 @@ export class VoiceChannel {
         const ids = speakers.map((p) => p.attributes?.portalId ?? p.identity);
         for (const cb of this.speakerListeners) cb(ids);
       });
-      room.on(RoomEvent.TrackSubscribed, (track) => {
+      room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio) {
           track.attach();
           void this.startAudio();
+          const pid = participant.attributes?.portalId ?? participant.identity;
+          if (this.userAudio.has(pid)) this.applyUserVolume(pid);
         }
         this.applyDeafen();
       });
@@ -148,6 +152,41 @@ export class VoiceChannel {
   setDeafen(on: boolean): void {
     this.deafened = on;
     this.applyDeafen();
+  }
+
+  getUserVolume(portalId: string): number {
+    const u = this.userAudio.get(portalId);
+    return u ? (u.muted ? 0 : u.volume) : 1;
+  }
+
+  setUserVolume(portalId: string, volume: number): void {
+    const prev = this.userAudio.get(portalId) ?? { volume: 1, muted: false };
+    this.userAudio.set(portalId, { volume: Math.max(0, Math.min(1, volume)), muted: prev.muted });
+    this.applyUserVolume(portalId);
+  }
+
+  muteUser(portalId: string, muted: boolean): void {
+    const prev = this.userAudio.get(portalId) ?? { volume: 1, muted: false };
+    this.userAudio.set(portalId, { ...prev, muted });
+    this.applyUserVolume(portalId);
+  }
+
+  private participantByPortal(portalId: string): RemoteParticipant | undefined {
+    if (!this.room) return undefined;
+    for (const p of this.room.remoteParticipants.values()) {
+      if ((p.attributes?.portalId ?? p.identity) === portalId) return p;
+    }
+    return undefined;
+  }
+
+  private applyUserVolume(portalId: string): void {
+    const p = this.participantByPortal(portalId);
+    if (!p) return;
+    const eff = this.getUserVolume(portalId);
+    for (const pub of p.audioTrackPublications.values()) {
+      const t = pub.track;
+      if (t && t.kind === Track.Kind.Audio) (t as RemoteAudioTrack).setVolume(eff);
+    }
   }
 
   private applyDeafen(): void {

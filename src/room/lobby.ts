@@ -344,9 +344,15 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           <div class="w-12 h-12 bg-sunbeam-yellow rounded-full flex items-center justify-center shrink-0">
             <span class="material-symbols-outlined text-carbon">${icon}</span>
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <p class="font-bold text-body text-carbon leading-none truncate">${escapeHtml(p.name)} <span class="squad-speaking" title="Hablando"></span></p>
             <p class="text-caption text-slate-gray">${statusBadge(p)}</p>
+            <div class="user-vol-row mt-1 flex items-center gap-2 ${p.id === selfId ? "hidden" : ""}">
+              <button type="button" class="user-mute-btn shrink-0 text-slate-gray hover:text-error transition-colors" title="Mutear">
+                <span class="material-symbols-outlined text-[16px]">volume_up</span>
+              </button>
+              <input type="range" min="0" max="100" value="100" class="user-vol-slider flex-1 min-w-0" />
+            </div>
           </div>
         </div>
         <span class="font-bold text-caption text-electric-violet shrink-0">${p.id === judgeId ? "DIRECTOR" : started ? "EN CAMPO" : "LISTO"}</span>
@@ -355,6 +361,31 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       if (dot) {
         dot.classList.toggle("visible", speakingIds.has(p.id));
         speakingDotEls.set(p.id, dot);
+      }
+      if (p.id !== selfId) {
+        const muteBtn = card.querySelector<HTMLButtonElement>(".user-mute-btn");
+        const slider = card.querySelector<HTMLInputElement>(".user-vol-slider");
+        if (muteBtn && slider) {
+          const apply = (eff: number): void => {
+            slider.value = String(Math.round(eff * 100));
+            const muted = eff === 0;
+            const iconEl = muteBtn.querySelector(".material-symbols-outlined");
+            if (iconEl) iconEl.textContent = muted ? "volume_off" : "volume_up";
+            muteBtn.classList.toggle("text-error", muted);
+          };
+          apply(voice.getUserVolume(p.id));
+          slider.addEventListener("input", () => {
+            const v = Number(slider.value) / 100;
+            voice.setUserVolume(p.id, v);
+            voice.muteUser(p.id, v === 0);
+            apply(v);
+          });
+          muteBtn.addEventListener("click", () => {
+            const eff = voice.getUserVolume(p.id);
+            voice.muteUser(p.id, eff !== 0);
+            apply(voice.getUserVolume(p.id));
+          });
+        }
       }
       playersEl.appendChild(card);
     }

@@ -135,6 +135,11 @@
     display: inline-block;
     animation: squad-speaking-pulse 1s ease-in-out infinite;
   }
+  .user-vol-slider {
+    height: 4px;
+    accent-color: var(--color-electric-violet);
+    cursor: pointer;
+  }
   @keyframes squad-speaking-pulse {
     0%,
     100% {
