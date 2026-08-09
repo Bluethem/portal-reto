@@ -226,11 +226,92 @@ export class JudgeDO {
   }
 }
 
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
+
+function json(body, status = 200, headers = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", ...CORS, ...headers },
+  });
+}
+
+function b64url(bytes) {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function signHmac(secret, data) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  return b64url(new Uint8Array(sig));
+}
+
+async function mintVoiceToken(apiKey, apiSecret, room, identity, name) {
+  const header = { alg: "HS256", typ: "JWT", kid: apiKey };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: apiKey,
+    sub: identity,
+    name,
+    video: {
+      room,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    },
+    nbf: now - 10,
+    exp: now + 3600,
+    jti: crypto.randomUUID(),
+  };
+  const enc = new TextEncoder();
+  const h = b64url(enc.encode(JSON.stringify(header)));
+  const p = b64url(enc.encode(JSON.stringify(payload)));
+  const sig = await signHmac(apiSecret, `${h}.${p}`);
+  return `${h}.${p}.${sig}`;
+}
+
+async function handleVoiceToken(request, env) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  const apiKey = env.LIVEKIT_API_KEY ?? "";
+  const apiSecret = env.LIVEKIT_API_SECRET ?? "";
+  if (!apiKey || !apiSecret) {
+    return json({ error: "voice unavailable" }, 503);
+  }
+  const url = new URL(request.url);
+  const room = (url.searchParams.get("room") ?? "").slice(0, 40);
+  const identity = (url.searchParams.get("identity") ?? "").slice(0, 40);
+  const name = (url.searchParams.get("name") ?? "").slice(0, 16);
+  if (!room || !/^anon_[A-Za-z0-9]+$/.test(identity)) {
+    return json({ error: "bad request" }, 400);
+  }
+  try {
+    const token = await mintVoiceToken(apiKey, apiSecret, room, identity, name);
+    return json({ token });
+  } catch (err) {
+    console.error("[judge] token error:", err);
+    return json({ error: "token failed" }, 500);
+  }
+}
+
 export default {
-  async fetch(_request, env) {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/voice-token") return handleVoiceToken(request, env);
     const id = env.JUDGE.idFromName("global");
     const stub = env.JUDGE.get(id);
-    return stub.fetch(_request);
+    return stub.fetch(request);
   },
   async scheduled(_controller, env) {
     const id = env.JUDGE.idFromName("global");
