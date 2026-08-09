@@ -20,7 +20,8 @@ export interface RoomInfo {
 
 export type RoomEvent =
   | { type: "judge"; judgeId: string }
-  | { type: "start" };
+  | { type: "start" }
+  | { type: "hint"; text: string; remaining: number; target: string };
 
 export interface ChatMessage {
   type: "chat";
@@ -63,11 +64,13 @@ export interface RoomState {
   cutCount: number;
   timerMs: number;
   effects: StateEffect[];
+  hintRemaining?: number;
   updatedAt: number;
 }
 
 export type RoomAction =
-  | { type: "cut"; label: string };
+  | { type: "cut"; label: string }
+  | { type: "hint-request" };
 
 export interface CursorMessage {
   type: "cursor";

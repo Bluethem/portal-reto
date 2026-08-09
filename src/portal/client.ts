@@ -37,6 +37,7 @@ export interface RoomClient {
   subscribeState(cb: (s: RoomState | null) => void): () => void;
   getState(): RoomState | null;
   sendCut(label: string): Promise<void>;
+  sendHintRequest(): Promise<void>;
   subscribeCursor(cb: (c: CursorMessage) => void): () => void;
   sendCursor(x: number, y: number, name: string, userId: string): void;
   subscribeActivity(cb: (users: string[]) => void): () => void;
@@ -227,6 +228,9 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     },
     sendCut: async (label) => {
       await actions.send({ content: { type: "cut", label } as RoomAction });
+    },
+    sendHintRequest: async () => {
+      await actions.send({ content: { type: "hint-request" } as RoomAction });
     },
     subscribeCursor: (cb) => {
       cursorListeners.add(cb);

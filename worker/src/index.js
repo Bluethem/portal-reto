@@ -1,5 +1,6 @@
 import { Portal } from "@portalsdk/core";
-import { generateLevel } from "../../agent/room/generator";
+import { generateLevel, colorName } from "../../agent/room/generator";
+import { phraseHint } from "../../agent/ia/groq";
 
 const START_TIMER_MS = 180_000;
 const LEVEL_BONUS_MS = 60_000;
@@ -35,6 +36,39 @@ function maybePeriodicEffect(j, roomId) {
   j.nextEffectAt = now + PERIODIC_EFFECT_INTERVAL_MS;
   addEffect(j, randomGlobalEffect(now));
   console.log(`[judge] ${roomId} efecto periódico (nivel ${j.level})`);
+}
+
+function sendHint(j, target, text, remaining) {
+  void j.room.send({ content: { type: "hint", text, remaining, target } });
+}
+
+function currentDirectorId(j) {
+  if (j.directorId) return j.directorId;
+  const p = j.room.getSnapshot().presence;
+  if (!p || p.kind !== "detailed") return null;
+  const dir = p.participants.find((x) => x.metadata?.role === "judge");
+  return dir ? dir.id : null;
+}
+
+async function buildHint(j, env) {
+  const nextLabel = j.order[j.cutCount];
+  const nextCable = j.cables.find((c) => c.label === nextLabel);
+  const color = nextCable ? colorName(nextCable.color) : "desconocido";
+  const fallback = `El siguiente cable a cortar es el ${color}.`;
+  const ai = await phraseHint(env, color, j.level);
+  return ai ?? fallback;
+}
+
+async function handleHintRequest(j, env, senderId) {
+  const director = currentDirectorId(j);
+  if (director && senderId !== director) return;
+  if (j.hintBudget <= 0) {
+    sendHint(j, senderId, "No te quedan comodines de IA para esta partida.", 0);
+    return;
+  }
+  j.hintBudget--;
+  const text = await buildHint(j, env);
+  sendHint(j, senderId, text, j.hintBudget);
 }
 
 export class JudgeDO {
@@ -125,13 +159,20 @@ export class JudgeDO {
       nextEffectAt: Date.now() + PERIODIC_EFFECT_INTERVAL_MS,
       started: false,
       finished: false,
+      hintBudget: 5,
+      autoTipSent: false,
+      directorId: null,
     };
     this.judges.set(roomId, j);
 
     room.on("message", (m) => {
       const content = m.content;
-      if ("type" in content && content.type === "start" && !j.started) {
+      if (!("type" in content)) return;
+      if (content.type === "judge") j.directorId = content.judgeId;
+      if (content.type === "start" && !j.started) {
         j.started = true;
+        j.hintBudget = 5;
+        j.autoTipSent = false;
         this.startLevel(j);
         console.log(`[judge] ${roomId} partida iniciada`);
       }
@@ -139,6 +180,10 @@ export class JudgeDO {
 
     actions.on("message", (m) => {
       if (!j.started || j.finished) return;
+      if (m.content.type === "hint-request") {
+        void handleHintRequest(j, this.env, m.sender.id);
+        return;
+      }
       if (m.content.type !== "cut") return;
       const label = m.content.label;
       const expected = j.order[j.cutCount];
@@ -193,6 +238,7 @@ export class JudgeDO {
         cutCount: j.cutCount,
         timerMs: j.timerMs,
         effects: activeEffects(j),
+        hintRemaining: j.hintBudget,
         updatedAt: Date.now(),
       },
     });
@@ -213,12 +259,21 @@ export class JudgeDO {
             cutCount: j.cutCount,
             timerMs: 0,
             effects: [],
+            hintRemaining: j.hintBudget,
             updatedAt: Date.now(),
           },
         });
         continue;
       }
       maybePeriodicEffect(j, j.roomId);
+      if (j.timerMs < 60_000 && !j.autoTipSent && j.hintBudget > 0) {
+        const director = currentDirectorId(j);
+        if (director) {
+          j.autoTipSent = true;
+          j.hintBudget--;
+          void buildHint(j, this.env).then((text) => sendHint(j, director, text, j.hintBudget));
+        }
+      }
       this.publish(j);
     }
   }
