@@ -33,8 +33,8 @@ se renderiza por colores; el `label` queda interno. Además: corte optimista
 
 **Fase 4 (efectos de estado):** trabas deterministas desde el nivel 4 en
 `RoomState.effects` (solo activos, pruneados en cada publish de 1 s): `freeze`
-al culpable al cortar mal, y globales `blind`/`scramble`/`lockCut` (periódicos
-desde el nivel 5, cada ~25 s). La IA (Groq) se difirió a la fase 4b (hints y
+al culpable al cortar mal, y globales `blind`/`lockCut` (periódicos desde el
+nivel 5, cada ~25 s). La IA (Groq) se difirió a la fase 4b (hints y
 briefing del director): el template español ya es legible.
 
 **Juez — dos implementaciones de la misma lógica:**
@@ -159,7 +159,7 @@ Typecheck:
 | 2 | Nivel 1 sin IA: tablero 2D, corte, orden, timer + bonus, manual por template | hecho |
 | 2b | Tablero 2D SVG (reemplaza three.js), corte animado | hecho |
 | 3 | Generación procedural: seed por nivel, reglas crecientes, solución única | hecho |
-| 4 | Efectos de estado: trabas deterministas (freeze, blind, scramble, lockCut) | hecho |
+| 4 | Efectos de estado: trabas deterministas (freeze, blind, lockCut) | hecho |
 | 4b | IA (Groq): hints/briefing del director (diferida) | pendiente |
 | 5 | Voz WebRTC (LiveKit) | hecho |
 | 6 | Despliegue Vercel + juez (Render o CF Workers) + test 4 jugadores | pendiente |

@@ -211,12 +211,10 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     const active = effects.filter((e) => e.expiresAt > now);
     const frozen = active.some((e) => e.kind === "freeze" && e.userId === selfId);
     const blind = active.some((e) => e.kind === "blind");
-    const scramble = active.some((e) => e.kind === "scramble");
     const lockCut = active.some((e) => e.kind === "lockCut");
 
     freezeOverlay.classList.toggle("visible", frozen);
     blindOverlay.classList.toggle("visible", blind);
-    svg.classList.toggle("effect-scramble", scramble);
 
     const interactive = !frozen && !lockCut;
     svg.style.pointerEvents = interactive ? "auto" : "none";

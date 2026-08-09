@@ -66,7 +66,7 @@ timer, colors, attachPick), tablero SVG, patrón del agente Node.
 ## 6b. Efectos de estado (fase 4)
 
 - Trabajas deterministas desde el nivel 4: `freeze` (puntero congelado), `blind`
-  (niebla), `scramble` (cortocircuito) y `lockCut` (bloqueo de corte).
+  (niebla) y `lockCut` (bloqueo de corte).
 - Trigger: cortes malos (nivel ≥ 4) y efecto global periódico (nivel ≥ 5).
 - El agente los publica en `RoomState.effects` (solo activos) y el board los aplica.
 - La IA no interviene: la lógica (orden/solución única) queda intacta.

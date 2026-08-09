@@ -8,7 +8,6 @@ const EFFECTS_MIN_LEVEL = 4;
 const EFFECTS_EXTRA_MIN_LEVEL = 5;
 const FREEZE_MS = 4_000;
 const LOCK_CUT_MS = 1_500;
-const SCRAMBLE_MS = 2_000;
 const BLIND_MS = 3_000;
 const EXTRA_GLOBAL_CHANCE = 0.5;
 const PERIODIC_EFFECT_INTERVAL_MS = 25_000;
@@ -25,8 +24,7 @@ function addEffect(j, effect) {
 
 function randomGlobalEffect(now) {
   const roll = Math.random();
-  if (roll < 0.4) return { kind: "blind", expiresAt: now + BLIND_MS };
-  if (roll < 0.7) return { kind: "scramble", expiresAt: now + SCRAMBLE_MS };
+  if (roll < 0.5) return { kind: "blind", expiresAt: now + BLIND_MS };
   return { kind: "lockCut", expiresAt: now + LOCK_CUT_MS };
 }
 

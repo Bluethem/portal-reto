@@ -175,29 +175,4 @@
     background: rgb(0 0 0 / 0.55);
     backdrop-filter: blur(3px);
   }
-  @keyframes cable-flicker {
-    0% {
-      opacity: 1;
-      transform: translateX(0);
-    }
-    25% {
-      opacity: 0.5;
-      transform: translateX(-2px);
-    }
-    50% {
-      opacity: 1;
-      transform: translateX(2px);
-    }
-    75% {
-      opacity: 0.6;
-      transform: translateX(-1px);
-    }
-    100% {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-  .effect-scramble {
-    animation: cable-flicker 0.25s steps(2) infinite;
-  }
 }

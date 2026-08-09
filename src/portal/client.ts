@@ -44,6 +44,7 @@ export interface RoomClient {
   setMeta(meta: PlayerMeta): void;
   sendEvent(e: RoomEvent): Promise<void>;
   sendChat(text: string, name: string): Promise<void>;
+  subscribeIndexRooms(cb: (rooms: RoomInfo[]) => void): () => void;
   publishRoom(info: RoomInfo): Promise<void>;
   release(): void;
 }
@@ -54,7 +55,10 @@ function roomsFromSnapshot(snap: { messages: readonly { content: RoomInfo }[] })
   for (const m of snap.messages) {
     if (now - m.content.updatedAt <= INDEX_TTL_MS) byId.set(m.content.id, m.content);
   }
-  return [...byId.values()];
+  return [...byId.values()].sort((a, b) => {
+    const byName = a.name.localeCompare(b.name, "es");
+    return byName !== 0 ? byName : a.id.localeCompare(b.id);
+  });
 }
 
 export function createMenuClient(): MenuClient {
@@ -131,12 +135,13 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
     return p.participants
       .filter((x) => x.metadata?.kind !== "agent")
       .filter((x) => {
-        if (seen.has(x.id)) return false;
-        seen.add(x.id);
+        const key = (x.metadata?.userId as string | undefined) ?? x.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       })
       .map((x) => ({
-        id: x.id,
+        id: (x.metadata?.userId as string | undefined) ?? x.id,
         name: (x.metadata?.name as string | undefined) ?? "?",
         host: (x.metadata?.host as boolean | undefined) ?? false,
       }));
@@ -246,6 +251,17 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       await room.send({
         content: { type: "chat", text, name },
       });
+    },
+    subscribeIndexRooms: (cb) => {
+      index.acquire();
+      const emit = () => cb(roomsFromSnapshot(index.getSnapshot()));
+      emit();
+      const unsubMsg = index.subscribe(emit);
+      const unsubStatus = index.on("status", emit);
+      return () => {
+        unsubMsg();
+        unsubStatus();
+      };
     },
     publishRoom: async (info) => {
       index.acquire();

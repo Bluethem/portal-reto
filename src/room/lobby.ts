@@ -1,5 +1,6 @@
 import { joinRoom } from "../portal/client";
 import type { ChatEntry, Role } from "../portal/types";
+import { getUserId } from "../shared/identity";
 import { getUsername } from "../shared/username";
 import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
@@ -9,12 +10,16 @@ const REQUIRED_PLAYERS = 4;
 const ALIVE_INTERVAL_MS = 1000;
 const ALIVE_TIMEOUT_MS = 3000;
 
-export function bootRoom(roomId: string, isHost: boolean, roomName: string): void {
+export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string): void {
   const root = document.getElementById("app");
   if (!root) return;
 
   const username = getUsername() ?? "anon";
-  const client = joinRoom(roomId, { name: username, host: isHost, role: null });
+  const isUrlHost = isHostArg;
+  let isHost = isHostArg;
+  const selfUserId = getUserId();
+  let roomName = roomNameArg || roomId;
+  const client = joinRoom(roomId, { userId: selfUserId, name: username, host: isHost, role: null });
 
   root.innerHTML = `
     <div class="min-h-screen flex flex-col">
@@ -164,6 +169,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const stageEl = document.getElementById("stage");
   const lobbyLayoutEl = document.getElementById("lobby-layout");
   const splitter = document.getElementById("splitter");
+  const roomTitleEl = document.getElementById("room-id");
   const roomCodeEl = document.getElementById("room-code");
   const copyBtn = document.getElementById("copy-code");
   const micBtn = document.getElementById("mic-btn");
@@ -182,6 +188,15 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   const code = roomId.slice(roomId.indexOf("-") + 1);
   if (roomCodeEl) roomCodeEl.textContent = code;
+
+  if (!roomNameArg) {
+    client.subscribeIndexRooms((rooms) => {
+      const match = rooms.find((r) => r.id === roomId);
+      if (!match) return;
+      roomName = match.name;
+      if (roomTitleEl) roomTitleEl.textContent = `Operación: ${escapeHtml(match.name)}`;
+    });
+  }
 
   if (copyBtn) {
     copyBtn.addEventListener("click", () => {
@@ -300,9 +315,17 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   let judgeAnnounced = false;
   let started = false;
   let judgeId: string | null = null;
+  let hostId: string | null = null;
   let selfRole: Role | null = null;
   let cleanup: (() => void) | null = null;
   const lastSeen = new Map<string, number>();
+
+  function buildMeta(
+    host: boolean,
+    role: Role | null
+  ): { userId: string; name: string; host: boolean; role: Role | null } {
+    return { userId: selfUserId, name: username, host, role };
+  }
 
   function activePlayers(): { id: string; name: string; host: boolean }[] {
     return client.getPlayers().filter((p) => lastSeen.has(p.id));
@@ -319,7 +342,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   function statusBadge(player: { id: string; host: boolean }): string {
     if (player.id === judgeId) return "Director";
     if (started) return "Cortador";
-    if (player.host) return "Host de operación";
+    if (player.host || player.id === hostId) return "Host de operación";
     return "Operativo";
   }
 
@@ -336,7 +359,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       const card = document.createElement("div");
       card.className =
         "bg-surface-highest rounded-card p-4 flex items-center justify-between border-l-[6px] border-electric-violet";
-      const icon = p.host ? "host" : "person";
+      const icon = p.host || p.id === hostId ? "host" : "person";
       card.innerHTML = `
         <div class="flex items-center gap-4 min-w-0">
           <div class="w-12 h-12 bg-sunbeam-yellow rounded-full flex items-center justify-center shrink-0">
@@ -463,7 +486,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     judgeId = id;
     judgeAnnounced = true;
     selfRole = id === client.getSelfId() ? "judge" : "cutter";
-    client.setMeta({ name: username, host: isHost, role: selfRole });
+    client.setMeta(buildMeta(isUrlHost, selfRole));
     updateLobbyBanner();
     updateStartArea();
   }
@@ -508,13 +531,62 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   }
 
   function maybeAnnounceJudge(): void {
-    if (!isHost || announced) return;
+    if (!isHost || announced || judgeId) return;
     const players = activePlayers();
     if (players.length !== REQUIRED_PLAYERS) return;
     announced = true;
     const judge = players[Math.floor(Math.random() * players.length)];
     applyJudge(judge.id);
     void client.sendEvent({ type: "judge", judgeId: judge.id });
+  }
+
+  function cedeHost(to: string): void {
+    isHost = false;
+    hostId = to;
+    client.setMeta(buildMeta(false, selfRole));
+    stopPublish();
+    updateStartArea();
+    updateLobbyBanner();
+  }
+
+  function recomputeHost(): void {
+    const selfId = client.getSelfId();
+    if (!selfId) return;
+    const active = activePlayers();
+    const explicit = active.find((p) => p.host);
+
+    if (isHost) {
+      if (isUrlHost) return;
+      if (explicit && explicit.id !== selfId) {
+        cedeHost(explicit.id);
+        return;
+      }
+      const smaller = active.find((p) => p.id < selfId);
+      if (smaller) {
+        cedeHost(smaller.id);
+        return;
+      }
+      hostId = selfId;
+      return;
+    }
+
+    if (explicit) {
+      hostId = explicit.id;
+      return;
+    }
+    if (hostId !== null && active.some((p) => p.id === hostId)) return;
+    hostId =
+      active.length > 0
+        ? active.reduce((m, p) => (p.id < m.id ? p : m)).id
+        : null;
+    if (hostId === selfId) {
+      isHost = true;
+      client.setMeta(buildMeta(false, selfRole));
+      ensurePublish();
+      updateStartArea();
+      updateLobbyBanner();
+      maybeAnnounceJudge();
+    }
   }
 
   client.subscribeStatus((s) => {
@@ -529,12 +601,15 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   client.subscribePresence((list) => {
     for (const p of list) lastSeen.set(p.id, Date.now());
+    recomputeHost();
     renderPlayers(list);
     updateLobbyBanner();
     updateStartArea();
     maybeAnnounceJudge();
     if (isHost) publish();
   });
+
+  let publishInterval: ReturnType<typeof setInterval> | null = null;
 
   function publish(): void {
     const list = activePlayers();
@@ -550,11 +625,18 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     });
   }
 
-  if (isHost) {
+  function ensurePublish(): void {
+    if (!isHost || publishInterval) return;
     publish();
-    const interval = setInterval(publish, 5000);
-    window.addEventListener("beforeunload", () => clearInterval(interval));
+    publishInterval = setInterval(publish, 5000);
   }
+
+  function stopPublish(): void {
+    if (publishInterval) clearInterval(publishInterval);
+    publishInterval = null;
+  }
+
+  ensurePublish();
 
   let lastChatKey = "";
   client.subscribeChat((entries) => {
@@ -623,6 +705,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       .map(([id]) => id);
     if (stale.length === 0) return;
     for (const id of stale) lastSeen.delete(id);
+    recomputeHost();
     renderPlayers(activePlayers());
     updateLobbyBanner();
     updateStartArea();

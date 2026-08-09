@@ -1,6 +1,7 @@
 export type Role = "judge" | "cutter";
 
 export interface PlayerMeta {
+  userId: string;
   name: string;
   host: boolean;
   role: Role | null;
@@ -49,7 +50,7 @@ export interface LevelRules {
 }
 
 export interface StateEffect {
-  kind: "freeze" | "blind" | "scramble" | "lockCut";
+  kind: "freeze" | "blind" | "lockCut";
   userId?: string;
   expiresAt: number;
 }

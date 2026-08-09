@@ -133,7 +133,8 @@ function renderRooms(root: HTMLElement, menu: ReturnType<typeof createMenuClient
     const code = joinCode.value.trim().toUpperCase();
     if (!code) return;
     const match = menu.getRooms().find((r) => r.id.toUpperCase().endsWith(`-${code}`));
-    window.location.href = `/room?id=${encodeURIComponent(match ? match.id : `prv-${code}`)}`;
+    const name = match ? `&name=${encodeURIComponent(match.name)}` : "";
+    window.location.href = `/room?id=${encodeURIComponent(match ? match.id : `prv-${code}`)}${name}`;
   });
 
   const statusEl = document.getElementById("rooms-status");
@@ -141,10 +142,16 @@ function renderRooms(root: HTMLElement, menu: ReturnType<typeof createMenuClient
   menu.subscribeStatus((s) => {
     if (statusEl) statusEl.textContent = s === "ready" ? "Red operativa." : `Estado: ${s}`;
   });
+  let lastRoomsSig: string | null = null;
   menu.subscribeRooms((rooms) => {
     if (!body) return;
-    body.replaceChildren();
     const pubs = rooms.filter((r) => r.mode === "public");
+    const sig = pubs
+      .map((r) => `${r.id}|${r.name}|${r.hostName}|${r.players}|${r.playing ?? false}`)
+      .join("\u0000");
+    if (sig === lastRoomsSig) return;
+    lastRoomsSig = sig;
+    body.replaceChildren();
     if (pubs.length === 0) {
       const empty = document.createElement("div");
       empty.className = "col-span-full text-center text-body-sm text-slate-gray py-10";
@@ -185,7 +192,7 @@ function roomCard(name: string, players: number, hostName: string, id: string, p
   `;
   card.querySelector<HTMLButtonElement>(".join-btn")!.addEventListener("click", () => {
     if (locked) return;
-    window.location.href = `/room?id=${encodeURIComponent(id)}`;
+    window.location.href = `/room?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`;
   });
   return card;
 }
