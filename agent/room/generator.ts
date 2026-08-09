@@ -76,16 +76,6 @@ function rowPermutation(rng: () => number, count: number, target: number): numbe
   return p;
 }
 
-function crossingsOf(rows: number[], toRows: number[]): number {
-  let count = 0;
-  for (let i = 0; i < rows.length; i++) {
-    for (let j = i + 1; j < rows.length; j++) {
-      if ((rows[i] - rows[j]) * (toRows[i] - toRows[j]) < 0) count++;
-    }
-  }
-  return count;
-}
-
 function ruleKey(r: Rule): string {
   switch (r.kind) {
     case "first":
