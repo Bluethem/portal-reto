@@ -62,7 +62,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
             </a>
           </div>
         </header>
-        <div class="flex-1 min-h-0 overflow-y-auto px-6 lg:px-10 py-6">
+        <div class="flex-1 min-h-0 overflow-y-auto px-6 lg:px-10 pt-6 pb-32 lg:pb-6">
           <div class="max-w-[1600px] mx-auto h-full min-h-0 flex flex-col">
             <div id="lobby-heading" class="flex flex-col md:flex-row justify-between items-end gap-4 border-b-4 border-outline-variant pb-4">
               <div>
@@ -96,7 +96,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
                   <p id="start-hint" class="text-center text-caption text-on-surface-variant uppercase mt-4">Esperando al menos 2 jugadores...</p>
                 </div>
               </section>
-              <section id="chat-col" class="flex flex-col lg:w-[280px] xl:w-[340px] lg:shrink-0 min-h-0">
+              <section id="chat-col" class="flex flex-col h-80 lg:h-auto lg:w-[280px] xl:w-[340px] lg:shrink-0 min-h-0">
                 <div id="comms" class="flex flex-col flex-1 min-h-0 bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 relative">
                   <h3 class="text-heading-sm font-display text-secondary uppercase mb-2">Comms tácticas</h3>
                   <p id="chat-error" class="hidden text-body-sm text-error font-bold mb-2"></p>

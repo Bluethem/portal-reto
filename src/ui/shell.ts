@@ -72,6 +72,10 @@ export function renderMobileNav(items: ShellItem[], active: string): string {
   return `
     <nav id="mobile-nav" class="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface-container border-t-8 border-black block-shadow flex items-stretch justify-around px-2 py-1.5">
       ${items.map((it) => mobileItemHtml(it, itemKey(it) === active)).join("")}
+      <button type="button" class="music-toggle flex flex-col items-center gap-0.5 px-2 py-1.5 flex-1 text-on-surface-variant" title="Música">
+        <span class="material-symbols-outlined text-2xl">music_note</span>
+        <span class="text-[10px] uppercase tracking-wide">Música</span>
+      </button>
     </nav>
   `;
 }
