@@ -3,6 +3,7 @@ import type { ChatEntry, Role } from "../portal/types";
 import { getUsername } from "../shared/username";
 import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
+import { VoiceChannel } from "./voice";
 
 const REQUIRED_PLAYERS = 4;
 const ALIVE_INTERVAL_MS = 1000;
@@ -45,7 +46,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
               <div id="mic-menu" class="hidden absolute right-0 top-full mt-2 w-60 bg-paper-white rounded-card shadow-pill p-4 z-20">
                 <div class="flex items-center justify-between mb-3">
                   <span class="text-heading-sm text-carbon font-bold">Micro</span>
-                  <span class="text-caption text-slate-gray">Voz en fase 5</span>
+                  <span class="text-caption text-slate-gray" id="voice-status">Voz en fase 5</span>
                 </div>
                 <button id="mic-toggle" type="button" class="w-full flex items-center justify-between bg-fog rounded-card px-4 py-2 text-body-sm text-carbon hover:bg-surface-container transition-colors">
                   <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">mic</span> Sonido</span>
@@ -167,6 +168,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const micStateEl = document.getElementById("mic-state");
   const deafenBtn = document.getElementById("deafen-btn");
   const deafenIconEl = document.getElementById("deafen-icon");
+  const voiceStatusEl = document.getElementById("voice-status");
 
   const code = roomId.slice(roomId.indexOf("-") + 1);
   if (roomCodeEl) roomCodeEl.textContent = code;
@@ -177,8 +179,25 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     });
   }
 
-  let micMuted = false;
+  const voice = new VoiceChannel();
+  let micMuted = true;
   let deafened = false;
+  let speakingIds = new Set<string>();
+  const speakingDotEls = new Map<string, HTMLElement>();
+
+  function updateVoiceStatusUI(): void {
+    if (!voiceStatusEl) return;
+    const s = voice.getStatus();
+    if (!VoiceChannel.isAvailable() || s === "offline") {
+      voiceStatusEl.textContent = "Voz no disponible";
+    } else if (s === "connecting") {
+      voiceStatusEl.textContent = "Conectando...";
+    } else if (s === "connected") {
+      voiceStatusEl.textContent = "Conectado";
+    } else {
+      voiceStatusEl.textContent = "Error de conexión";
+    }
+  }
 
   function refreshAudio(): void {
     if (!micIconEl || !micStateEl || !deafenIconEl) return;
@@ -200,10 +219,19 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     document.addEventListener("click", () => micMenuEl.classList.add("hidden"));
   }
   if (micToggle) {
-    micToggle.addEventListener("click", (e) => {
+    micToggle.addEventListener("click", async (e) => {
       e.stopPropagation();
+      if (voice.getStatus() !== "connected") {
+        updateVoiceStatusUI();
+        return;
+      }
       micMuted = !micMuted;
       refreshAudio();
+      const ok = await voice.setMicEnabled(!micMuted);
+      if (!ok) {
+        micMuted = !micMuted;
+        refreshAudio();
+      }
     });
   }
   if (deafenBtn) {
@@ -211,8 +239,18 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       e.stopPropagation();
       deafened = !deafened;
       refreshAudio();
+      voice.setDeafen(deafened);
     });
   }
+
+  voice.subscribeStatus(updateVoiceStatusUI);
+  voice.subscribeSpeakers((ids) => {
+    speakingIds = new Set(ids);
+    for (const [id, dot] of speakingDotEls) {
+      dot.classList.toggle("visible", speakingIds.has(id));
+    }
+  });
+  refreshAudio();
 
   let announced = false;
   let judgeAnnounced = false;
@@ -244,7 +282,13 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   function renderPlayers(list: { id: string; name: string; host: boolean }[]): void {
     if (!playersEl) return;
     playersEl.replaceChildren();
-    for (const p of list.slice(0, REQUIRED_PLAYERS)) {
+    speakingDotEls.clear();
+    const selfId = client.getSelfId();
+    const merged = [...list];
+    if (selfId && !merged.some((p) => p.id === selfId)) {
+      merged.unshift({ id: selfId, name: username, host: isHost });
+    }
+    for (const p of merged.slice(0, REQUIRED_PLAYERS)) {
       const card = document.createElement("div");
       card.className =
         "bg-surface-highest rounded-card p-4 flex items-center justify-between border-l-[6px] border-electric-violet";
@@ -255,15 +299,20 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
             <span class="material-symbols-outlined text-carbon">${icon}</span>
           </div>
           <div class="min-w-0">
-            <p class="font-bold text-body text-carbon leading-none truncate">${escapeHtml(p.name)}</p>
+            <p class="font-bold text-body text-carbon leading-none truncate">${escapeHtml(p.name)} <span class="squad-speaking" title="Hablando"></span></p>
             <p class="text-caption text-slate-gray">${statusBadge(p)}</p>
           </div>
         </div>
         <span class="font-bold text-caption text-electric-violet shrink-0">${p.id === judgeId ? "DIRECTOR" : started ? "EN CAMPO" : "LISTO"}</span>
       `;
+      const dot = card.querySelector<HTMLElement>(".squad-speaking");
+      if (dot) {
+        dot.classList.toggle("visible", speakingIds.has(p.id));
+        speakingDotEls.set(p.id, dot);
+      }
       playersEl.appendChild(card);
     }
-    for (let i = list.length; i < REQUIRED_PLAYERS; i++) {
+    for (let i = merged.length; i < REQUIRED_PLAYERS; i++) {
       const empty = document.createElement("div");
       empty.className =
         "bg-fog rounded-card p-4 flex items-center justify-center border border-dashed border-slate-gray h-[88px]";
@@ -275,7 +324,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       `;
       playersEl.appendChild(empty);
     }
-    if (squadCountEl) squadCountEl.textContent = `${list.length} / 4`;
+    if (squadCountEl) squadCountEl.textContent = `${merged.length} / 4`;
   }
 
   let chatErrorTimer: ReturnType<typeof setTimeout> | null = null;
@@ -425,7 +474,13 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   }
 
   client.subscribeStatus((s) => {
-    if (s === "ready") updateStartArea();
+    if (s === "ready") {
+      updateStartArea();
+      const selfId = client.getSelfId();
+      if (selfId && !voice.getStatus().match(/connecting|connected/)) {
+        void voice.connect(roomId, selfId, username);
+      }
+    }
   });
 
   client.subscribePresence((list) => {
@@ -490,6 +545,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       if (!lockedOut) {
         lockedOut = true;
         if (lockedOutEl) lockedOutEl.classList.remove("hidden");
+        voice.dispose();
         client.release();
       }
       return;
@@ -517,7 +573,10 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   const pruneInterval = setInterval(() => {
     const now = Date.now();
-    const stale = [...lastSeen.entries()].filter(([, t]) => now - t > ALIVE_TIMEOUT_MS).map(([id]) => id);
+    const selfId = client.getSelfId();
+    const stale = [...lastSeen.entries()]
+      .filter(([id, t]) => id !== selfId && now - t > ALIVE_TIMEOUT_MS)
+      .map(([id]) => id);
     if (stale.length === 0) return;
     for (const id of stale) lastSeen.delete(id);
     renderPlayers(activePlayers());
@@ -534,6 +593,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   window.addEventListener("beforeunload", () => {
     clearInterval(aliveInterval);
     clearInterval(pruneInterval);
+    voice.dispose();
     client.release();
   });
 }
