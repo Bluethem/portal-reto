@@ -6,7 +6,8 @@ import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 import { VoiceChannel } from "./voice";
 
-const REQUIRED_PLAYERS = 4;
+const ROOM_CAPACITY = 4;
+const MIN_PLAYERS_TO_START = 2;
 const ALIVE_INTERVAL_MS = 1000;
 const ALIVE_TIMEOUT_MS = 3000;
 
@@ -110,7 +111,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
               >
                 Iniciar partida
               </button>
-              <p id="start-hint" class="text-center text-caption text-slate-gray mt-4">Esperando al equipo completo.</p>
+              <p id="start-hint" class="text-center text-caption text-slate-gray mt-4">Esperando al menos 2 jugadores...</p>
             </div>
           </aside>
         </div>
@@ -333,7 +334,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     if (selfId && !merged.some((p) => p.id === selfId)) {
       merged.unshift({ id: selfId, name: username, host: isHost });
     }
-    for (const p of merged.slice(0, REQUIRED_PLAYERS)) {
+    for (const p of merged.slice(0, ROOM_CAPACITY)) {
       const card = document.createElement("div");
       card.className =
         "bg-surface-highest rounded-card p-4 flex items-center justify-between border-l-[6px] border-electric-violet";
@@ -357,7 +358,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       }
       playersEl.appendChild(card);
     }
-    for (let i = merged.length; i < REQUIRED_PLAYERS; i++) {
+    for (let i = merged.length; i < ROOM_CAPACITY; i++) {
       const empty = document.createElement("div");
       empty.className =
         "bg-fog rounded-card p-4 flex items-center justify-center border border-dashed border-slate-gray h-[88px]";
@@ -369,7 +370,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       `;
       playersEl.appendChild(empty);
     }
-    if (squadCountEl) squadCountEl.textContent = `${merged.length} / 4`;
+    if (squadCountEl) squadCountEl.textContent = `${merged.length} / ${ROOM_CAPACITY}`;
   }
 
   let chatErrorTimer: ReturnType<typeof setTimeout> | null = null;
@@ -428,18 +429,18 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       return;
     }
     const count = activePlayers().length;
-    if (count >= REQUIRED_PLAYERS && judgeId) {
+    if (count >= MIN_PLAYERS_TO_START && judgeId) {
       statusEl.textContent = "Juez elegido. Esperando que el host inicie...";
-    } else if (count >= REQUIRED_PLAYERS) {
-      statusEl.textContent = "¡4 jugadores! Designando juez...";
+    } else if (count >= MIN_PLAYERS_TO_START) {
+      statusEl.textContent = "¡Jugadores suficientes! Designando juez...";
     } else {
-      statusEl.textContent = `Esperando jugadores (${count}/4)...`;
+      statusEl.textContent = `Esperando jugadores (${count}/${ROOM_CAPACITY})...`;
     }
   }
 
   function updateStartArea(): void {
     const count = activePlayers().length;
-    const full = count >= REQUIRED_PLAYERS;
+    const full = count >= MIN_PLAYERS_TO_START;
     if (!startBtn) return;
     if (!isHost) {
       startBtn.disabled = true;
@@ -453,10 +454,10 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     startBtn.disabled = !(judgeId && full);
     if (startHintEl) {
       startHintEl.textContent = judgeId && full
-        ? "Equipo completo. ¡Inicia la operación!"
+        ? "Equipo mínimo listo. ¡Inicia la operación!"
         : full
           ? "Designando juez..."
-          : "Esperando al equipo completo.";
+          : `Esperando al menos 2 jugadores (${count}/${ROOM_CAPACITY})...`;
     }
   }
 
@@ -511,7 +512,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   function maybeAnnounceJudge(): void {
     if (!isHost || announced || judgeId) return;
     const players = activePlayers();
-    if (players.length !== REQUIRED_PLAYERS) return;
+    if (players.length < MIN_PLAYERS_TO_START) return;
     announced = true;
     const judge = players[Math.floor(Math.random() * players.length)];
     applyJudge(judge.id);

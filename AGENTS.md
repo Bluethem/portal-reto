@@ -132,8 +132,9 @@ Typecheck:
 - Presence metadata por canal de room — `{ name, host, role }`, con `role:
   "judge" | "cutter"`. Nota de naming: el **director humano** tiene
   `role: "judge"` en el cliente; el proceso servidor autoritativo es el "agente
-  juez". El director lo elige el host al azar al llegar 4 jugadores; el host
-  inicia la partida con "Iniciar partida" (`{ type: "start" }`).
+  juez". El director lo elige el host al azar al llegar 2+ jugadores (mínimo
+  para iniciar); el host inicia la partida con "Iniciar partida"
+  (`{ type: "start" }`).
 - El agente publica presencia con `{ kind: "agent" }` (el cliente lo filtra).
 
 ## Estructura de carpetas
@@ -155,7 +156,7 @@ Typecheck:
 
 | Fase | Contenido | Estado |
 |------|-----------|--------|
-| 1 | Menú + rooms + lobby (Portal, presencia, arranque a 4) | hecho |
+| 1 | Menú + rooms + lobby (Portal, presencia, arranque a 2+) | hecho |
 | 2 | Nivel 1 sin IA: tablero 2D, corte, orden, timer + bonus, manual por template | hecho |
 | 2b | Tablero 2D SVG (reemplaza three.js), corte animado | hecho |
 | 3 | Generación procedural: seed por nivel, reglas crecientes, solución única | hecho |

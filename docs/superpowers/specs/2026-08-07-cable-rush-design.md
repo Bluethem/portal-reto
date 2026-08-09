@@ -85,7 +85,7 @@ timer, colors, attachPick), tablero SVG, patrón del agente Node.
 
 ## 8. Flujo de datos (por room)
 
-1. Jugador abre el menú → crea/une a room → 4 jugadores → arranca.
+1. Jugador abre el menú → crea/une a room → 2+ jugadores → arranca.
 2. El agente genera el nivel: tablero + reglas (mismo seed) + manual (fase 2:
    template; fase 4: redactado por Groq).
 3. El director lee el manual; los 3 cortadores describen/cortan por voz.
