@@ -3,6 +3,22 @@ import { Room, RoomEvent, Track } from "livekit-client";
 export type VoiceStatus = "offline" | "connecting" | "connected" | "error";
 export type VoicePlayback = "unknown" | "blocked" | "playing";
 
+export interface VoiceDebugRemote {
+  identity: string;
+  portalId: string;
+  audioPubs: number;
+  attached: number;
+  muted: number;
+  enabled: number;
+}
+
+export interface VoiceDebug {
+  state: string;
+  micOn: boolean;
+  micLevel: number;
+  remotes: VoiceDebugRemote[];
+}
+
 const LIVEKIT_URL = import.meta.env.PUBLIC_LIVEKIT_URL as string | undefined;
 const TOKEN_URL = import.meta.env.PUBLIC_VOICE_TOKEN_URL as string | undefined;
 
@@ -64,12 +80,19 @@ export class VoiceChannel {
     }
     try {
       this.setStatus("connecting");
+      const lkIdentity = `${identity}-${Math.random().toString(36).slice(2, 8)}`;
       const base = TOKEN_URL.replace(/\/$/, "");
-      const qs = new URLSearchParams({ room: roomId, identity, name });
+      const qs = new URLSearchParams({ room: roomId, identity: lkIdentity, name });
       const resp = await fetch(`${base}/api/voice-token?${qs.toString()}`);
       if (!resp.ok) throw new Error(`token ${resp.status}`);
       const body = (await resp.json()) as { token?: string };
       if (!body.token || this.disposed) return;
+      if (this.room) {
+        const prev = this.room;
+        this.room = null;
+        prev.removeAllListeners();
+        void prev.disconnect();
+      }
       const room = new Room({ adaptiveStream: true, dynacast: true });
       this.room = room;
       room.on(RoomEvent.Connected, () => this.setStatus("connected"));
@@ -95,20 +118,67 @@ export class VoiceChannel {
         if (p.isLocal && pub.source === Track.Source.Microphone) this.setMicOn(true);
       });
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-        const ids = speakers.map((p) => p.identity);
+        const ids = speakers.map((p) => p.attributes?.portalId ?? p.identity);
         for (const cb of this.speakerListeners) cb(ids);
       });
       room.on(RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind === Track.Kind.Audio) void this.startAudio();
+        console.log("[voice] track subscribed", track.kind, track.source);
+        if (track.kind === Track.Kind.Audio) {
+          track.attach();
+          void this.startAudio();
+        }
         this.applyDeafen();
       });
-      room.on(RoomEvent.ParticipantConnected, () => this.applyDeafen());
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        console.log("[voice] track unsubscribed", track.kind, track.source);
+      });
+      room.on(RoomEvent.ParticipantConnected, (p) => {
+        console.log("[voice] participant connected", p.identity);
+        this.applyDeafen();
+      });
+      room.on(RoomEvent.ParticipantDisconnected, (p) => {
+        console.log("[voice] participant disconnected", p.identity);
+      });
+      room.on(RoomEvent.ConnectionQualityChanged, (q, p) => {
+        console.log("[voice] connection quality", q, p.identity);
+      });
+      room.on(RoomEvent.MediaDevicesError, (e) => {
+        console.error("[voice] media devices error", e);
+      });
       await room.connect(LIVEKIT_URL, body.token, { autoSubscribe: true });
+      try {
+        await room.localParticipant.setAttributes({ name, portalId: identity });
+      } catch (err) {
+        console.warn("[voice] setAttributes failed (dot por identidad):", err);
+      }
       this.applyDeafen();
     } catch (err) {
       console.error("[voice] connect failed:", err);
       this.setStatus("error");
     }
+  }
+
+  getDebugSnapshot(): VoiceDebug {
+    const room = this.room;
+    const remotes = room
+      ? Array.from(room.remoteParticipants.values()).map((p) => {
+          const pubs = Array.from(p.audioTrackPublications.values());
+          return {
+            identity: p.identity,
+            portalId: p.attributes?.portalId ?? p.identity,
+            audioPubs: pubs.length,
+            attached: pubs.filter((pub) => (pub.track?.attachedElements.length ?? 0) > 0).length,
+            muted: pubs.filter((pub) => pub.isMuted).length,
+            enabled: pubs.filter((pub) => pub.isEnabled).length,
+          };
+        })
+      : [];
+    return {
+      state: room?.state ?? "disconnected",
+      micOn: this.micOn,
+      micLevel: room?.localParticipant.audioLevel ?? 0,
+      remotes,
+    };
   }
 
   async startAudio(): Promise<void> {

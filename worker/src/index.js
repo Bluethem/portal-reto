@@ -270,6 +270,7 @@ async function mintVoiceToken(apiKey, apiSecret, room, identity, name) {
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
+      canUpdateOwnMetadata: true,
     },
     nbf: now - 10,
     exp: now + 3600,
@@ -293,7 +294,7 @@ async function handleVoiceToken(request, env) {
   const room = (url.searchParams.get("room") ?? "").slice(0, 40);
   const identity = (url.searchParams.get("identity") ?? "").slice(0, 40);
   const name = (url.searchParams.get("name") ?? "").slice(0, 16);
-  if (!room || !/^anon_[A-Za-z0-9]+$/.test(identity)) {
+  if (!room || !/^anon_[A-Za-z0-9]+(?:-[a-z0-9]{1,8})?$/.test(identity)) {
     return json({ error: "bad request" }, 400);
   }
   try {
