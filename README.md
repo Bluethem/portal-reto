@@ -61,3 +61,10 @@ npm run build
   (si no, el mint de tokens devuelve `403 origin_not_allowed`).
 - **Juez**: Cloudflare Workers (free) como Durable Object — `worker/wrangler.toml`,
   `wrangler secret put PUBLIC_PORTAL_KEY`, deploy por Git (root `worker`).
+
+## Docs
+
+Specs y planes por fase en `docs/superpowers/`.
+
+Configuración de despliegue y handoff completo (Cloudflare, Portal, Vercel, gotchas
+del SDK): [`docs/DEPLOY.md`](docs/DEPLOY.md).

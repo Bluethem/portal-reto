@@ -8,7 +8,7 @@ El timer global decide el final (score = nivel alcanzado).
 
 ## Estado
 
-**Fases 1-4 implementadas** (IA Groq, fase 4b, diferida).
+**Fases 1-5 implementadas** (IA Groq, fase 4b, diferida).
 
 **Fase 1:** username → rooms → lobby → juez aleatorio por host. Canales en uso:
 `rooms-index` (host-managed, heartbeat ~5s, TTL 10s) y `room-<id>` (presencia +
@@ -43,16 +43,23 @@ briefing del director): el template español ya es legible.
 - `worker/src/index.js` — **Durable Object de Cloudflare (experimental)**,
   alarm + cron, comparte `generator.ts`. Riesgo de drift: mantener sincronizada.
 
-Pendiente: fases 4b (IA Groq), 5 (voz WebRTC con LiveKit/Daily) y 6 (despliegue
-+ test 4 jugadores). Cada fase es demo-able por sí sola.
+**Fase 5 (voz WebRTC con LiveKit):** una sala LiveKit por room, conectada al
+entrar al lobby con el mic apagado (escuchar no pide permiso). El worker de
+Cloudflare expone `/api/voice-token` (JWT HS256 con WebCrypto); el cliente usa
+`livekit-client` desde `src/room/voice.ts`. `mic`/`deafen` controlan audio real
+y el squad muestra al hablante activo. Sin credenciales → "Voz no disponible" y
+el juego sigue por chat.
+
+Pendiente: fases 4b (IA Groq) y 6 (despliegue + test 4 jugadores). Cada fase es
+demo-able por sí sola.
 
 Espec y planes (superpowers):
 - `docs/superpowers/specs/*.md` — diseño v2 + fases 2b (board 2D), 3
-  (procedural) y 4 (efectos)
+  (procedural), 4 (efectos) y 5 (voz)
 - `docs/superpowers/plans/*.md` — planes por fase con checkboxes de progreso
 
-Próximo paso cuando se retome la implementación: plan de la fase 5 (voz con
-LiveKit/Daily) con la skill writing-plans.
+Próximo paso cuando se retome la implementación: fase 4b (hints/briefing del
+director con Groq) o fase 6 (despliegue + test 4 jugadores).
 
 ## Development
 
@@ -78,7 +85,9 @@ Typecheck:
 - `PORTAL_SECRET` — sin uso por ahora (el SDK solo usa la publishable key)
 - `GROQ_API_KEY`, `GROQ_MODEL` — agente (hints/briefing del director; fase 4b,
   aun sin uso)
-- `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — voz (fase 5; aun sin configurar)
+- `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — voz (secrets del worker / `.dev.vars`)
+- `PUBLIC_LIVEKIT_URL`, `PUBLIC_VOICE_TOKEN_URL` — voz (cliente; wss de LiveKit
+  Cloud y endpoint `/api/voice-token` del worker)
 
 > **Nota de arquitectura:** el juez puede correr como proceso Node de larga
 > duración (p. ej. Render) o como Durable Object de Cloudflare (`worker/`),
@@ -93,7 +102,7 @@ Typecheck:
 - @portalsdk/core — presencia, canales y estado compartido (WebSocket directo al cliente); NO trae voz
 - SVG + DOM — tablero 2D de cables (three.js eliminado)
 - Agente Node o Cloudflare Workers DO — juez multi-room + generación de niveles
-- LiveKit/Daily (WebRTC) — comunicación por voz (fase 5)
+- LiveKit (WebRTC) — comunicación por voz (fase 5)
 
 ## Concepto del juego
 
@@ -152,7 +161,7 @@ Typecheck:
 | 3 | Generación procedural: seed por nivel, reglas crecientes, solución única | hecho |
 | 4 | Efectos de estado: trabas deterministas (freeze, blind, scramble, lockCut) | hecho |
 | 4b | IA (Groq): hints/briefing del director (diferida) | pendiente |
-| 5 | Voz WebRTC (LiveKit/Daily) | pendiente |
+| 5 | Voz WebRTC (LiveKit) | hecho |
 | 6 | Despliegue Vercel + juez (Render o CF Workers) + test 4 jugadores | pendiente |
 
 **Decisión de IA (fase 4b):** la IA redacta el manual en lenguaje natural a
