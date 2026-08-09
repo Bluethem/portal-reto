@@ -50,6 +50,21 @@ function currentDirectorId(j) {
   return dir ? dir.id : null;
 }
 
+function roomMembers(j) {
+  const p = j.room.getSnapshot().presence;
+  if (!p || p.kind !== "detailed") return [];
+  const seen = new Set();
+  const out = [];
+  for (const x of p.participants) {
+    if (x.metadata?.kind === "agent") continue;
+    const id = x.metadata?.userId ?? x.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, role: id === j.directorId ? "judge" : "cutter" });
+  }
+  return out;
+}
+
 async function buildHint(j, env) {
   const nextLabel = j.order[j.cutCount];
   const nextCable = j.cables.find((c) => c.label === nextLabel);
@@ -126,12 +141,19 @@ export class JudgeDO {
   }
 
   watchRooms() {
+    const now = Date.now();
     const rooms = this.index
       .getSnapshot()
       .messages.map((m) => m.content)
-      .filter((r) => Date.now() - r.updatedAt <= 10_000)
+      .filter((r) => now - r.updatedAt <= 10_000)
       .map((r) => r.id);
+    const activeIds = new Set(rooms);
     for (const id of rooms) this.bootJudge(id);
+    for (const [id, j] of this.judges) {
+      if (!activeIds.has(id) && !j.started && !j.finished) {
+        this.cleanupJudge(id);
+      }
+    }
   }
 
   bootJudge(roomId) {
@@ -162,6 +184,7 @@ export class JudgeDO {
       hintBudget: 5,
       autoTipSent: false,
       directorId: null,
+      emptyTicks: 0,
     };
     this.judges.set(roomId, j);
 
@@ -239,9 +262,20 @@ export class JudgeDO {
         timerMs: j.timerMs,
         effects: activeEffects(j),
         hintRemaining: j.hintBudget,
+        members: roomMembers(j),
         updatedAt: Date.now(),
       },
     });
+  }
+
+  cleanupJudge(roomId) {
+    const j = this.judges.get(roomId);
+    if (!j) return;
+    if (j.tick) clearInterval(j.tick);
+    j.room.release();
+    j.actions.release();
+    this.judges.delete(roomId);
+    console.log(`[judge] ${roomId} sala vacía, juez liberado`);
   }
 
   tickGames() {
@@ -260,6 +294,7 @@ export class JudgeDO {
             timerMs: 0,
             effects: [],
             hintRemaining: j.hintBudget,
+            members: roomMembers(j),
             updatedAt: Date.now(),
           },
         });
@@ -273,6 +308,15 @@ export class JudgeDO {
           j.hintBudget--;
           void buildHint(j, this.env).then((text) => sendHint(j, director, text, j.hintBudget));
         }
+      }
+      if (roomMembers(j).length === 0) {
+        j.emptyTicks++;
+        if (j.emptyTicks >= 3) {
+          this.cleanupJudge(j.roomId);
+          continue;
+        }
+      } else {
+        j.emptyTicks = 0;
       }
       this.publish(j);
     }

@@ -6,7 +6,7 @@ import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 import { VoiceChannel } from "./voice";
 import { crewmateSvg } from "../ui/crewmate";
-import { startLobbyMusic, stopMusic } from "../ui/music";
+import { startLobbyMusic, stopMusic, mountMusicToggle, MUSIC_TOGGLE_HTML } from "../ui/music";
 import { playClick, playJoin, playLeave, playReady, playStart } from "../ui/sound";
 import { renderMobileNav, renderSidebar } from "../ui/shell";
 import type { ShellItem } from "../ui/shell";
@@ -35,8 +35,8 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   const client = joinRoom(roomId, { userId: selfUserId, name: username, host: isHost, role: null });
 
   root.innerHTML = `
-    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface analog-texture">
-      ${renderSidebar(username, ROOM_ITEMS, "room")}
+    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface">
+      ${renderSidebar(username, ROOM_ITEMS, "room", { footerSlot: MUSIC_TOGGLE_HTML })}
       <main class="flex-1 h-screen flex flex-col overflow-hidden">
         <header class="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-surface-container border-b-8 border-black block-shadow">
           <div class="flex items-center gap-3 min-w-0">
@@ -148,7 +148,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
         </div>
       </div>
       <div id="reglas-modal" class="hidden fixed inset-0 z-[55] bg-surface/90 backdrop-blur flex items-center justify-center px-6">
-        <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-8 w-full max-w-lg relative max-h-[80vh] overflow-y-auto">
+        <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-8 w-full max-w-2xl relative max-h-[80vh] overflow-y-auto">
           <button id="reglas-close" type="button" class="absolute top-3 right-3 text-on-surface-variant hover:text-error transition-colors">
             <span class="material-symbols-outlined">close</span>
           </button>
@@ -298,6 +298,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   };
   window.addEventListener("pointerdown", startMusicOnce);
   window.addEventListener("keydown", startMusicOnce);
+  mountMusicToggle();
 
   let announced = false;
   let judgeAnnounced = false;
@@ -527,12 +528,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     updateStartArea();
   }
 
-  function applyStart(): void {
-    stopMusic();
-    playStart();
-    started = true;
-    mountByRole(selfRole ?? "cutter");
-    updateLobbyBanner();
+  function switchToGameLayout(): void {
     document.getElementById("lobby-heading")?.classList.add("hidden");
     document.getElementById("start-area")?.classList.add("hidden");
     if (lobbyLayoutEl && boardCol && squadCol) {
@@ -542,6 +538,15 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     lobbyLayoutEl?.classList.remove("lg:items-start");
     boardCol?.classList.remove("hidden");
     boardCol?.classList.add("flex");
+  }
+
+  function applyStart(): void {
+    stopMusic();
+    playStart();
+    started = true;
+    mountByRole(selfRole ?? "cutter");
+    updateLobbyBanner();
+    switchToGameLayout();
   }
 
   function maybeAnnounceJudge(): void {
@@ -683,13 +688,35 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   client.subscribeState((s) => {
     if (!s) return;
     if (!started && (s.status === "playing" || s.status === "finished")) {
-      if (!lockedOut) {
-        lockedOut = true;
-        if (lockedOutEl) lockedOutEl.classList.remove("hidden");
-        voice.dispose();
-        client.release();
+      const selfId = client.getSelfId();
+      const member = selfId && s.members ? s.members.find((m) => m.id === selfId) : undefined;
+      if (member) {
+        if (s.status === "playing") {
+          started = true;
+          selfRole = member.role;
+          if (member.role === "judge") judgeId = selfId;
+          client.setMeta(buildMeta(isUrlHost, selfRole));
+          mountByRole(selfRole);
+          switchToGameLayout();
+          renderPlayers(activePlayers());
+        } else {
+          if (gameoverEl && goLevelEl) {
+            goLevelEl.textContent = String(s.level);
+            gameoverEl.classList.remove("hidden");
+          }
+          return;
+        }
+      } else if (selfId) {
+        if (!lockedOut) {
+          lockedOut = true;
+          if (lockedOutEl) lockedOutEl.classList.remove("hidden");
+          voice.dispose();
+          client.release();
+        }
+        return;
+      } else {
+        return;
       }
-      return;
     }
     if (hudEl) hudEl.classList.remove("hidden");
     if (timerEl) {

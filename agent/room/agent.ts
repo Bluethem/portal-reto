@@ -46,6 +46,7 @@ interface Judge {
   hintBudget: number;
   autoTipSent: boolean;
   directorId: string | null;
+  emptyTicks: number;
 }
 
 const judges = new Map<string, Judge>();
@@ -54,6 +55,31 @@ function isHuman(count: number, room: ChannelHandle<RoomState | RoomEvent>): boo
   const p = room.getSnapshot().presence as DetailedPresence | undefined;
   if (!p || p.kind !== "detailed") return false;
   return p.participants.filter((x) => x.metadata?.kind !== "agent").length === count;
+}
+
+function roomMembers(j: Judge): { id: string; role: "judge" | "cutter" }[] {
+  const p = j.room.getSnapshot().presence as DetailedPresence | undefined;
+  if (!p || p.kind !== "detailed") return [];
+  const seen = new Set<string>();
+  const out: { id: string; role: "judge" | "cutter" }[] = [];
+  for (const x of p.participants) {
+    if (x.metadata?.kind === "agent") continue;
+    const id = (x.metadata?.userId as string | undefined) ?? x.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, role: id === j.directorId ? "judge" : "cutter" });
+  }
+  return out;
+}
+
+function cleanupJudge(roomId: string): void {
+  const j = judges.get(roomId);
+  if (!j) return;
+  stopTimer(j);
+  j.room.release();
+  j.actions.release();
+  judges.delete(roomId);
+  console.log(`[agent] ${roomId} sala vacía, juez liberado`);
 }
 
 function activeEffects(j: Judge): StateEffect[] {
@@ -92,6 +118,7 @@ function publish(j: Judge): void {
       timerMs: j.timerMs,
       effects: activeEffects(j),
       hintRemaining: j.hintBudget,
+      members: roomMembers(j),
       updatedAt: Date.now(),
     },
   });
@@ -147,7 +174,7 @@ function startTimer(j: Judge): void {
     j.timerMs = Math.max(0, j.timerMs - 1000);
     if (j.timerMs === 0) {
       j.finished = true;
-      void j.room.send({ content: { status: "finished", level: j.level, cables: j.cables, rules: j.rules, cutCount: j.cutCount, timerMs: 0, effects: [], hintRemaining: j.hintBudget, updatedAt: Date.now() } });
+      void j.room.send({ content: { status: "finished", level: j.level, cables: j.cables, rules: j.rules, cutCount: j.cutCount, timerMs: 0, effects: [], hintRemaining: j.hintBudget, members: roomMembers(j), updatedAt: Date.now() } });
       stopTimer(j);
       return;
     }
@@ -159,6 +186,15 @@ function startTimer(j: Judge): void {
         j.hintBudget--;
         void buildHint(j).then((text) => sendHint(j, director, text, j.hintBudget));
       }
+    }
+    if (roomMembers(j).length === 0) {
+      j.emptyTicks++;
+      if (j.emptyTicks >= 3) {
+        cleanupJudge(j.roomId);
+        return;
+      }
+    } else {
+      j.emptyTicks = 0;
     }
     publish(j);
   }, 1000);
@@ -201,6 +237,7 @@ function bootJudge(roomId: string): void {
     hintBudget: 5,
     autoTipSent: false,
     directorId: null,
+    emptyTicks: 0,
   };
   judges.set(roomId, j);
 
@@ -257,12 +294,19 @@ function bootJudge(roomId: string): void {
 }
 
 function watchRooms(): void {
+  const now = Date.now();
   const rooms = index
     .getSnapshot()
     .messages.map((m) => m.content)
-    .filter((r) => Date.now() - r.updatedAt <= 10_000)
+    .filter((r) => now - r.updatedAt <= 10_000)
     .map((r) => r.id);
+  const activeIds = new Set(rooms);
   for (const id of rooms) bootJudge(id);
+  for (const [id, j] of judges) {
+    if (!activeIds.has(id) && !j.started && !j.finished) {
+      cleanupJudge(id);
+    }
+  }
 }
 
 index.acquire();

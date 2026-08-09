@@ -1,11 +1,13 @@
 import { createMenuClient } from "../portal/client";
 import { getUsername, setUsername } from "../shared/username";
 import { randomRoomId, randomRoomCode } from "../shared/id";
-import { startLobbyMusic } from "../ui/music";
+import { startLobbyMusic, mountMusicToggle, MUSIC_TOGGLE_HTML } from "../ui/music";
 import { playClick } from "../ui/sound";
 import { renderMobileNav, renderSidebar } from "../ui/shell";
 import type { ShellItem } from "../ui/shell";
 import { reglasHtml } from "../ui/reglas";
+import { playIntro } from "../ui/intro";
+import { shipSvg } from "../ui/ship";
 
 type MenuView = "rooms" | "reglas";
 
@@ -18,6 +20,7 @@ export function bootMenu(): void {
   const root = document.getElementById("app");
   if (!root) return;
 
+  playIntro();
   const menu = createMenuClient();
 
   const username = getUsername();
@@ -33,7 +36,7 @@ export function bootMenu(): void {
 
 function renderUsername(root: HTMLElement, onDone: (name: string) => void): void {
   root.innerHTML = `
-    <div class="min-h-screen bg-surface text-on-surface analog-texture flex flex-col items-center justify-center px-6 relative overflow-hidden">
+    <div class="min-h-screen bg-surface text-on-surface flex flex-col items-center justify-center px-6 relative overflow-hidden">
       <div class="text-center mb-10">
         <h1 class="text-hero font-display text-primary tracking-tighter uppercase stroke-heavy mb-1">cable rush</h1>
         <p class="text-subheading text-secondary font-bold uppercase tracking-wide">Identidad para continuar</p>
@@ -69,8 +72,8 @@ function renderUsername(root: HTMLElement, onDone: (name: string) => void): void
 
 function shell(active: MenuView, username: string): string {
   return `
-    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface analog-texture">
-      ${renderSidebar(username, ROOM_ITEMS, active)}
+    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface">
+      ${renderSidebar(username, ROOM_ITEMS, active, { footerSlot: MUSIC_TOGGLE_HTML })}
       <main class="flex-1 h-full overflow-y-auto px-6 lg:px-12 py-8 bg-surface relative pb-32 lg:pb-28">
         <div id="menu-body"></div>
       </main>
@@ -93,6 +96,7 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
   };
   window.addEventListener("pointerdown", startMusicOnce);
   window.addEventListener("keydown", startMusicOnce);
+  mountMusicToggle();
 
   const views: Record<MenuView, () => (() => void) | undefined> = {
     rooms: () => renderRooms(body, menu),
@@ -149,42 +153,49 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
 
 function renderRooms(body: HTMLElement, menu: ReturnType<typeof createMenuClient>): () => void {
   body.innerHTML = `
-    <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-8 border-b-8 border-black pb-4">
-      <div>
-        <h2 class="text-display font-display text-primary uppercase tracking-tight stroke-heavy">Rooms</h2>
-        <p class="text-body-sm text-on-surface-variant uppercase tracking-wider mt-2">Todas las operaciones activas en la red.</p>
+    <div class="relative">
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.07]">
+        ${shipSvg("#a4ffe8", 420)}
       </div>
-      <div id="room-filters" class="hidden sm:flex gap-2">
-        <button type="button" data-filter="all" class="room-filter px-4 py-2 bg-secondary text-on-secondary border-4 border-black text-caption uppercase block-shadow">All</button>
-        <button type="button" data-filter="public" class="room-filter px-4 py-2 bg-surface-container border-4 border-black text-caption text-on-surface uppercase block-shadow">Public</button>
-        <button type="button" data-filter="private" class="room-filter px-4 py-2 bg-surface-container border-4 border-black text-caption text-on-surface uppercase block-shadow">Private</button>
-      </div>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <section class="lg:col-span-2">
-        <div id="rooms-status" class="text-caption text-on-surface-variant uppercase mb-5">conectando...</div>
-        <div id="rooms-body" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-      </section>
-      <aside class="flex flex-col gap-6">
-        <form id="join-form" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 flex flex-col gap-5">
-          <h3 class="text-heading-sm font-display text-secondary uppercase">Unirse con código</h3>
-          <div class="relative">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">key</span>
-            <input
-              id="join-code"
-              maxlength="8"
-              placeholder="Código"
-              class="w-full pl-10 pr-3 py-2 bg-surface-high border-4 border-black rounded-lg text-body-sm text-carbon uppercase placeholder:text-slate-gray focus:outline-none focus:border-secondary"
-            />
+      <div class="relative z-10">
+        <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-8 border-b-8 border-black pb-4">
+          <div>
+            <h2 class="text-display font-display text-primary uppercase tracking-tight stroke-heavy">Rooms</h2>
+            <p class="text-body-sm text-on-surface-variant uppercase tracking-wider mt-2">Todas las operaciones activas en la red.</p>
           </div>
-          <button type="submit" class="pressed bg-secondary text-on-secondary text-body-sm font-bold py-2 rounded-full border-4 border-black block-shadow">
-            Unirse
-          </button>
-        </form>
-        <button id="create-btn" type="button" class="pressed bg-primary text-on-primary text-body-sm font-bold py-2 rounded-full border-4 border-black block-shadow uppercase">
-          Crear operación
-        </button>
-      </aside>
+          <div id="room-filters" class="hidden sm:flex gap-2">
+            <button type="button" data-filter="all" class="room-filter px-4 py-2 bg-secondary text-on-secondary border-4 border-black text-caption uppercase block-shadow">All</button>
+            <button type="button" data-filter="public" class="room-filter px-4 py-2 bg-surface-container border-4 border-black text-caption text-on-surface uppercase block-shadow">Public</button>
+            <button type="button" data-filter="private" class="room-filter px-4 py-2 bg-surface-container border-4 border-black text-caption text-on-surface uppercase block-shadow">Private</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <section class="lg:col-span-2">
+            <div id="rooms-status" class="text-caption text-on-surface-variant uppercase mb-5">conectando...</div>
+            <div id="rooms-body" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+          </section>
+          <aside class="flex flex-col gap-6">
+            <form id="join-form" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 flex flex-col gap-5">
+              <h3 class="text-heading-sm font-display text-secondary uppercase">Unirse con código</h3>
+              <div class="relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">key</span>
+                <input
+                  id="join-code"
+                  maxlength="8"
+                  placeholder="Código"
+                  class="w-full pl-10 pr-3 py-2 bg-surface-high border-4 border-black rounded-lg text-body-sm text-carbon uppercase placeholder:text-slate-gray focus:outline-none focus:border-secondary"
+                />
+              </div>
+              <button type="submit" class="pressed bg-secondary text-on-secondary text-body-sm font-bold py-2 rounded-full border-4 border-black block-shadow">
+                Unirse
+              </button>
+            </form>
+            <button id="create-btn" type="button" class="pressed bg-primary text-on-primary text-body-sm font-bold py-2 rounded-full border-4 border-black block-shadow uppercase">
+              Crear operación
+            </button>
+          </aside>
+        </div>
+      </div>
     </div>
   `;
 
@@ -210,8 +221,8 @@ function renderRooms(body: HTMLElement, menu: ReturnType<typeof createMenuClient
     roomsBody.replaceChildren();
     if (visible.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "col-span-full text-center text-body-sm text-on-surface-variant uppercase py-10";
-      empty.innerHTML = `<span class="material-symbols-outlined text-[48px] text-ash block mx-auto mb-2">group_off</span>No hay operaciones activas. Creá una para empezar.`;
+      empty.className = "col-span-full flex flex-col items-center justify-center gap-4 text-center text-body-sm text-on-surface-variant uppercase py-10";
+      empty.innerHTML = `${shipSvg("#cdcd00", 150)}<span>No hay operaciones activas. Creá una para empezar.</span>`;
       roomsBody.appendChild(empty);
       return;
     }

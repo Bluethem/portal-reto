@@ -3,10 +3,10 @@ import type { Cable, StateEffect } from "../portal/types";
 import { playCut, playWrong } from "../ui/sound";
 
 const VIEW_W = 800;
-const VIEW_H = 460;
+const VIEW_H = 540;
 const PANEL_W = 90;
 const PANEL_X = 46;
-const PANEL_Y = 26;
+const PANEL_Y = 12;
 const PANEL_H = VIEW_H - PANEL_Y * 2;
 const TERMINAL_X_R = PANEL_X + PANEL_W;
 const CURSOR_THROTTLE_MS = 120;
@@ -96,6 +96,8 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     els.line.setAttribute("stroke", "#ff5252");
     els.outline.setAttribute("stroke", "#ff5252");
     els.stripe.setAttribute("stroke", "#ff5252");
+    els.postA.setAttribute("fill", "#ff5252");
+    els.postB.setAttribute("fill", "#ff5252");
     els.line.setAttribute("stroke-dasharray", "10 6");
     els.outline.setAttribute("stroke-dasharray", "10 6");
     els.hit.style.pointerEvents = "none";
@@ -151,6 +153,8 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       els.outline.removeAttribute("stroke-dasharray");
       els.line.setAttribute("stroke", hex(c.color));
       els.outline.setAttribute("stroke", "#000000");
+      els.postA.setAttribute("fill", hex(c.color));
+      els.postB.setAttribute("fill", hex(c.color));
       els.line.setAttribute("stroke-width", "10");
       els.outline.setAttribute("stroke-width", "14");
       els.g.setAttribute("style", "opacity:1;transition:none;");

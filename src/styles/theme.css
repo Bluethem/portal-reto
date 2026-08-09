@@ -245,4 +245,123 @@
     -webkit-text-stroke: 1px #000000;
     text-shadow: 3px 3px 0 #000000;
   }
+  .intro-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background-color: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    transition: opacity 350ms ease;
+  }
+  .intro-overlay.intro-fadeout {
+    opacity: 0;
+  }
+  .intro-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    text-align: center;
+  }
+  .intro-title {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .intro-letter {
+    display: inline-block;
+    opacity: 0;
+    animation: intro-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .intro-cables-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .intro-cable {
+    opacity: 0;
+    animation: intro-cable-in 0.5s ease-out both;
+  }
+  .intro-cable line:nth-child(3) {
+    animation: cable-charge 0.7s linear infinite;
+  }
+  .intro-scissors {
+    font-size: 2rem;
+    color: var(--color-secondary);
+    opacity: 0;
+    animation: intro-cut 0.5s ease-out both;
+  }
+  .intro-tagline {
+    opacity: 0;
+    animation: intro-tagline-in 0.5s ease-out 1.3s both;
+  }
+  @keyframes intro-pop {
+    0% {
+      opacity: 0;
+      transform: translateY(24px) scale(0.5);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes intro-cable-in {
+    0% {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes cable-charge {
+    0% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: -18;
+    }
+  }
+  @keyframes intro-cut {
+    0% {
+      opacity: 0;
+      transform: scale(0.3) rotate(-20deg);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.15) rotate(5deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0);
+    }
+  }
+  @keyframes intro-tagline-in {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .intro-letter,
+    .intro-cable,
+    .intro-scissors,
+    .intro-tagline {
+      animation: none;
+      opacity: 1;
+    }
+    .intro-cable line:nth-child(3) {
+      animation: none;
+    }
+  }
 }

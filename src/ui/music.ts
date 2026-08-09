@@ -3,6 +3,15 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let step = 0;
 let playing = false;
 
+const STORAGE_KEY = "cable-rush-music";
+let enabled = (() => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+})();
+
 function audio(): AudioContext | null {
   if (typeof AudioContext === "undefined") return null;
   if (!ctx) ctx = new AudioContext();
@@ -39,6 +48,7 @@ function scheduleStep(ac: AudioContext): void {
 }
 
 export function startLobbyMusic(): void {
+  if (!enabled) return;
   const ac = audio();
   if (!ac || playing) return;
   playing = true;
@@ -54,4 +64,45 @@ export function stopMusic(): void {
   }
   playing = false;
   step = 0;
+}
+
+export function isMusicEnabled(): boolean {
+  return enabled;
+}
+
+export function toggleMusic(): boolean {
+  enabled = !enabled;
+  try {
+    localStorage.setItem(STORAGE_KEY, enabled ? "on" : "off");
+  } catch {
+    // ignore
+  }
+  if (enabled) startLobbyMusic();
+  else stopMusic();
+  return enabled;
+}
+
+export const MUSIC_TOGGLE_HTML = `
+  <button id="music-toggle" type="button" class="flex items-center gap-3 p-3 text-left w-full text-on-surface hover:bg-surface-variant rounded-full border-4 border-transparent hover:border-black transition-transform active:scale-95">
+    <span class="material-symbols-outlined text-xl">music_note</span>
+    <span class="text-caption uppercase tracking-wide">Música</span>
+    <span class="music-state ml-auto text-caption uppercase text-secondary">ON</span>
+  </button>
+`;
+
+export function mountMusicToggle(): void {
+  const btn = document.getElementById("music-toggle");
+  if (!btn) return;
+  const icon = btn.querySelector<HTMLElement>(".material-symbols-outlined");
+  const state = btn.querySelector<HTMLElement>(".music-state");
+  const refresh = (): void => {
+    const on = isMusicEnabled();
+    if (icon) icon.textContent = on ? "music_note" : "music_off";
+    if (state) state.textContent = on ? "ON" : "OFF";
+  };
+  btn.addEventListener("click", () => {
+    toggleMusic();
+    refresh();
+  });
+  refresh();
 }

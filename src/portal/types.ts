@@ -65,6 +65,7 @@ export interface RoomState {
   timerMs: number;
   effects: StateEffect[];
   hintRemaining?: number;
+  members?: { id: string; role: Role }[];
   updatedAt: number;
 }
 
