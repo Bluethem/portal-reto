@@ -4,6 +4,8 @@ import { getUsername } from "../shared/username";
 import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 import { crewmateSvg } from "../ui/crewmate";
+import { startLobbyMusic, stopMusic } from "../ui/music";
+import { playClick, playJoin, playLeave, playReady, playStart } from "../ui/sound";
 
 const REQUIRED_PLAYERS = 4;
 const ALIVE_INTERVAL_MS = 1000;
@@ -191,6 +193,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   if (copyBtn) {
     copyBtn.addEventListener("click", () => {
+      playClick();
       void copyRoomCode(copyBtn, code);
     });
   }
@@ -211,16 +214,26 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   if (micBtn) {
     micBtn.addEventListener("click", () => {
+      playClick();
       micMuted = !micMuted;
       refreshAudio();
     });
   }
   if (deafenBtn) {
     deafenBtn.addEventListener("click", () => {
+      playClick();
       deafened = !deafened;
       refreshAudio();
     });
   }
+
+  const startMusicOnce = () => {
+    startLobbyMusic();
+    window.removeEventListener("pointerdown", startMusicOnce);
+    window.removeEventListener("keydown", startMusicOnce);
+  };
+  window.addEventListener("pointerdown", startMusicOnce);
+  window.addEventListener("keydown", startMusicOnce);
 
   let announced = false;
   let judgeAnnounced = false;
@@ -249,8 +262,18 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     return "Operativo";
   }
 
+  const seenPlayerIds = new Set<string>();
+
   function renderPlayers(list: { id: string; name: string; host: boolean }[]): void {
     if (!playersEl) return;
+    const ids = new Set(list.map((p) => p.id));
+    if (seenPlayerIds.size > 0) {
+      for (const id of ids) if (!seenPlayerIds.has(id)) playJoin();
+      for (const id of seenPlayerIds) if (!ids.has(id)) playLeave();
+    }
+    if (!started && list.length === REQUIRED_PLAYERS && seenPlayerIds.size < REQUIRED_PLAYERS) playReady();
+    seenPlayerIds.clear();
+    for (const id of ids) seenPlayerIds.add(id);
     playersEl.replaceChildren();
     for (const [i, p] of list.slice(0, REQUIRED_PLAYERS).entries()) {
       const color = CREW_COLORS[i % CREW_COLORS.length];
@@ -392,6 +415,8 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   }
 
   function applyStart(): void {
+    stopMusic();
+    playStart();
     started = true;
     mountByRole(selfRole ?? "cutter");
     updateLobbyBanner();
@@ -491,6 +516,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   if (startBtn) {
     startBtn.addEventListener("click", () => {
+      playClick();
       if (judgeAnnounced) {
         applyStart();
         void client.sendEvent({ type: "start" });
