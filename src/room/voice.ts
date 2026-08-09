@@ -98,7 +98,10 @@ export class VoiceChannel {
         const ids = speakers.map((p) => p.identity);
         for (const cb of this.speakerListeners) cb(ids);
       });
-      room.on(RoomEvent.TrackSubscribed, () => this.applyDeafen());
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) void this.startAudio();
+        this.applyDeafen();
+      });
       room.on(RoomEvent.ParticipantConnected, () => this.applyDeafen());
       await room.connect(LIVEKIT_URL, body.token, { autoSubscribe: true });
       this.applyDeafen();

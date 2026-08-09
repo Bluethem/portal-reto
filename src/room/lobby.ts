@@ -192,7 +192,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       voiceStatusEl.textContent = "Voz no disponible";
     } else if (s === "connecting") {
       voiceStatusEl.textContent = "Conectando...";
-    } else if (s === "connected" && voice.getPlayback() === "blocked") {
+    } else if (s === "connected" && voice.getPlayback() !== "playing") {
       voiceStatusEl.textContent = "Clic para activar el audio";
     } else if (s === "connected") {
       voiceStatusEl.textContent = "Conectado";
@@ -249,18 +249,16 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     });
   }
 
-  let audioUnlocked = false;
   function unlockAudio(): void {
-    if (audioUnlocked) return;
-    audioUnlocked = true;
+    if (voice.getPlayback() === "playing") return;
     void voice.startAudio();
   }
 
   voice.subscribeStatus((s) => {
     updateVoiceStatusUI();
     if (s === "connected") {
-      window.addEventListener("pointerdown", unlockAudio, { once: true });
-      window.addEventListener("click", unlockAudio, { once: true });
+      window.addEventListener("pointerdown", unlockAudio);
+      window.addEventListener("click", unlockAudio);
     }
   });
   voice.subscribePlayback(updateVoiceStatusUI);
