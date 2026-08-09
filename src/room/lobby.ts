@@ -6,6 +6,8 @@ import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 import { VoiceChannel } from "./voice";
 import { crewmateSvg } from "../ui/crewmate";
+import { startLobbyMusic, stopMusic } from "../ui/music";
+import { playClick, playJoin, playLeave, playReady, playStart } from "../ui/sound";
 
 const ROOM_CAPACITY = 4;
 const MIN_PLAYERS_TO_START = 2;
@@ -208,6 +210,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
 
   if (copyBtn) {
     copyBtn.addEventListener("click", () => {
+      playClick();
       void copyRoomCode(copyBtn, code);
     });
   }
@@ -233,6 +236,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   if (micBtn) {
     micBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
+      playClick();
       if (voice.getStatus() !== "connected") {
         refreshAudio();
         return;
@@ -249,6 +253,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   if (deafenBtn) {
     deafenBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      playClick();
       deafened = !deafened;
       refreshAudio();
       voice.setDeafen(deafened);
@@ -279,6 +284,14 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     }
   });
   refreshAudio();
+
+  const startMusicOnce = () => {
+    startLobbyMusic();
+    window.removeEventListener("pointerdown", startMusicOnce);
+    window.removeEventListener("keydown", startMusicOnce);
+  };
+  window.addEventListener("pointerdown", startMusicOnce);
+  window.addEventListener("keydown", startMusicOnce);
 
   let announced = false;
   let judgeAnnounced = false;
@@ -315,8 +328,18 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     return "Operativo";
   }
 
+  const seenPlayerIds = new Set<string>();
+
   function renderPlayers(list: { id: string; name: string; host: boolean }[]): void {
     if (!playersEl) return;
+    const ids = new Set(list.map((p) => p.id));
+    if (seenPlayerIds.size > 0) {
+      for (const id of ids) if (!seenPlayerIds.has(id)) playJoin();
+      for (const id of seenPlayerIds) if (!ids.has(id)) playLeave();
+    }
+    if (!started && list.length === ROOM_CAPACITY && seenPlayerIds.size < ROOM_CAPACITY) playReady();
+    seenPlayerIds.clear();
+    for (const id of ids) seenPlayerIds.add(id);
     playersEl.replaceChildren();
     speakingDotEls.clear();
     const selfId = client.getSelfId();
@@ -497,6 +520,8 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   }
 
   function applyStart(): void {
+    stopMusic();
+    playStart();
     started = true;
     mountByRole(selfRole ?? "cutter");
     updateLobbyBanner();
@@ -661,6 +686,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
 
   if (startBtn) {
     startBtn.addEventListener("click", () => {
+      playClick();
       if (judgeAnnounced) {
         applyStart();
         void client.sendEvent({ type: "start" });

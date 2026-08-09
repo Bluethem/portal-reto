@@ -2,6 +2,8 @@ import { createMenuClient } from "../portal/client";
 import { getUsername, setUsername } from "../shared/username";
 import { randomRoomId, randomRoomCode } from "../shared/id";
 import { crewmateSvg } from "../ui/crewmate";
+import { startLobbyMusic } from "../ui/music";
+import { playClick } from "../ui/sound";
 
 const CREW_COLORS = ["#ffb4a9", "#2196f3", "#4caf50", "#cdcd00", "#a4ffe8", "#c51111"];
 
@@ -122,6 +124,14 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
   const body = document.getElementById("menu-body")!;
   const fab = document.getElementById("fab-create");
 
+  const startMusicOnce = () => {
+    startLobbyMusic();
+    window.removeEventListener("pointerdown", startMusicOnce);
+    window.removeEventListener("keydown", startMusicOnce);
+  };
+  window.addEventListener("pointerdown", startMusicOnce);
+  window.addEventListener("keydown", startMusicOnce);
+
   const views: Record<"home" | "join" | "create" | "leaderboard", () => (() => void) | undefined> = {
     home: () => renderHome(body, menu),
     join: () => renderJoin(body, menu),
@@ -167,9 +177,15 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
   }
 
   document.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach((btn) => {
-    btn.addEventListener("click", () => switchView(btn.dataset.view as "home" | "join" | "create" | "leaderboard"));
+    btn.addEventListener("click", () => {
+      playClick();
+      switchView(btn.dataset.view as "home" | "join" | "create" | "leaderboard");
+    });
   });
-  fab?.addEventListener("click", () => switchView("create"));
+  fab?.addEventListener("click", () => {
+    playClick();
+    switchView("create");
+  });
 
   markActive(current);
   cleanup = views[current]();
@@ -253,6 +269,7 @@ function renderJoin(body: HTMLElement, menu: ReturnType<typeof createMenuClient>
   const joinCode = document.getElementById("join-code") as HTMLInputElement;
   joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
+    playClick();
     const code = joinCode.value.trim().toUpperCase();
     if (!code) return;
     const match = menu.getRooms().find((r) => r.id.toUpperCase().endsWith(`-${code}`));
@@ -295,6 +312,7 @@ function renderCreate(body: HTMLElement): undefined {
   const createMode = document.getElementById("create-mode") as HTMLSelectElement;
   createForm.addEventListener("submit", (e) => {
     e.preventDefault();
+    playClick();
     const mode = createMode.value as "public" | "private";
     const id = mode === "public" ? randomRoomId() : `prv-${randomRoomCode()}`;
     const name = createName.value.trim() || "Room";
