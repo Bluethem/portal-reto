@@ -57,10 +57,6 @@ export class JudgeDO {
   async alarm() {
     try {
       await this.ensureStarted();
-      const idx = this.index?.getSnapshot();
-      console.log(
-        `[judge] alarm; rooms-index status=${idx?.status ?? "none"} rooms=${idx?.messages.length ?? 0} judges=${this.judges.size}`
-      );
       this.tick();
     } catch (err) {
       console.error("[judge] alarm error:", err);
@@ -231,12 +227,12 @@ export class JudgeDO {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(_request, env) {
     const id = env.JUDGE.idFromName("global");
     const stub = env.JUDGE.get(id);
-    return stub.fetch(request);
+    return stub.fetch(_request);
   },
-  async scheduled(controller, env) {
+  async scheduled(_controller, env) {
     const id = env.JUDGE.idFromName("global");
     const stub = env.JUDGE.get(id);
     await stub.fetch(new Request("https://cron"));
