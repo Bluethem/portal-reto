@@ -236,4 +236,9 @@ export default {
     const stub = env.JUDGE.get(id);
     return stub.fetch(request);
   },
+  async scheduled(controller, env) {
+    const id = env.JUDGE.idFromName("global");
+    const stub = env.JUDGE.get(id);
+    await stub.fetch(new Request("https://cron"));
+  },
 };
