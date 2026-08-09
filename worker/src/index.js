@@ -57,6 +57,10 @@ export class JudgeDO {
   async alarm() {
     try {
       await this.ensureStarted();
+      const idx = this.index?.getSnapshot();
+      console.log(
+        `[judge] alarm; rooms-index status=${idx?.status ?? "none"} rooms=${idx?.messages.length ?? 0} judges=${this.judges.size}`
+      );
       this.tick();
     } catch (err) {
       console.error("[judge] alarm error:", err);
