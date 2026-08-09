@@ -15,9 +15,12 @@ const PENDING_CUT_MS = 1500;
 
 interface CableEls {
   g: SVGGElement;
+  outline: SVGLineElement;
   line: SVGLineElement;
   stripe: SVGLineElement;
   hit: SVGLineElement;
+  postA: SVGCircleElement;
+  postB: SVGCircleElement;
   row: number;
   toRow: number;
 }
@@ -32,10 +35,10 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   const NS = "http://www.w3.org/2000/svg";
   const wrap = document.createElement("div");
   wrap.style.position = "relative";
-  const svg = svgEl(NS, "svg", { viewBox: `0 0 ${VIEW_W} ${VIEW_H}`, width: "100%", height: "100%", style: "display:block;background:#0b1326;border-radius:16px;border:4px solid #000000;box-shadow:0 12px 32px rgb(0 0 0 / 0.14);" });
+  const svg = svgEl(NS, "svg", { viewBox: `0 0 ${VIEW_W} ${VIEW_H}`, width: "100%", height: "100%", class: "board-svg analog-texture" });
 
-  const panelL = svgEl(NS, "rect", { x: String(PANEL_X), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "#171f33", stroke: "#000000" });
-  const panelR = svgEl(NS, "rect", { x: String(VIEW_W - PANEL_X - PANEL_W), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "#171f33", stroke: "#000000" });
+  const panelL = svgEl(NS, "rect", { x: String(PANEL_X), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "var(--color-surface-high)", stroke: "#000000" });
+  const panelR = svgEl(NS, "rect", { x: String(VIEW_W - PANEL_X - PANEL_W), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "var(--color-surface-high)", stroke: "#000000" });
   svg.append(panelL, panelR);
 
   const cableEls = new Map<string, CableEls>();
@@ -47,6 +50,7 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   freezeOverlay.textContent = "CONGELADO";
   const blindOverlay = document.createElement("div");
   blindOverlay.className = "effect-overlay effect-blind";
+  blindOverlay.textContent = "SEÑAL PERDIDA";
   const effectLayer = document.createElement("div");
   effectLayer.className = "effect-layer";
   effectLayer.append(freezeOverlay, blindOverlay);
@@ -76,20 +80,50 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
     const x2 = VIEW_W - TERMINAL_X_R;
     const y1 = rowY(els.row, total);
     const y2 = rowY(els.toRow, total);
-    for (const el of [els.line, els.stripe, els.hit]) {
+    for (const el of [els.outline, els.line, els.stripe, els.hit]) {
       el.setAttribute("x1", String(x1));
       el.setAttribute("y1", String(y1));
       el.setAttribute("x2", String(x2));
       el.setAttribute("y2", String(y2));
     }
+    els.postA.setAttribute("cx", String(x1));
+    els.postA.setAttribute("cy", String(y1));
+    els.postB.setAttribute("cx", String(x2));
+    els.postB.setAttribute("cy", String(y2));
   }
 
   function applyCutLook(els: CableEls): void {
     els.line.setAttribute("stroke", "#ff5252");
+    els.outline.setAttribute("stroke", "#ff5252");
     els.stripe.setAttribute("stroke", "#ff5252");
     els.line.setAttribute("stroke-dasharray", "10 6");
+    els.outline.setAttribute("stroke-dasharray", "10 6");
     els.hit.style.pointerEvents = "none";
     els.g.setAttribute("style", "transition:opacity 600ms ease 300ms;opacity:0;");
+  }
+
+  function spark(els: CableEls): void {
+    const s = svgEl(NS, "line", {
+      x1: els.line.getAttribute("x1")!, y1: els.line.getAttribute("y1")!,
+      x2: els.line.getAttribute("x2")!, y2: els.line.getAttribute("y2")!,
+      stroke: "#ffffff", "stroke-width": "12", "stroke-linecap": "round", opacity: "1",
+    });
+    s.style.transition = "opacity 220ms ease";
+    svg.appendChild(s);
+    requestAnimationFrame(() => s.setAttribute("opacity", "0"));
+    window.setTimeout(() => s.remove(), 260);
+  }
+
+  function flashRed(els: CableEls): void {
+    const f = svgEl(NS, "line", {
+      x1: els.line.getAttribute("x1")!, y1: els.line.getAttribute("y1")!,
+      x2: els.line.getAttribute("x2")!, y2: els.line.getAttribute("y2")!,
+      stroke: "#ff5252", "stroke-width": "16", "stroke-linecap": "round", opacity: "1",
+    });
+    f.style.transition = "opacity 300ms ease";
+    svg.appendChild(f);
+    requestAnimationFrame(() => f.setAttribute("opacity", "0"));
+    window.setTimeout(() => f.remove(), 340);
   }
 
   function renderCables(cables: Cable[]): void {
@@ -100,6 +134,7 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       const isCut = c ? c.cut || pendingCuts.has(c.label) : true;
       if (!c || isCut) {
         els.line.setAttribute("stroke-dasharray", "10 6");
+        els.outline.setAttribute("stroke-dasharray", "10 6");
         els.hit.style.pointerEvents = "none";
         els.g.setAttribute("style", "transition:opacity 600ms ease 250ms;opacity:0;");
         if (!c) els.g.remove();
@@ -107,12 +142,17 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
         if (c && !c.cut && pendingCuts.has(c.label)) {
           pendingCuts.delete(c.label);
           playWrong();
+          flashRed(els);
         }
         continue;
       }
       els.hit.style.pointerEvents = "stroke";
       els.line.removeAttribute("stroke-dasharray");
+      els.outline.removeAttribute("stroke-dasharray");
       els.line.setAttribute("stroke", hex(c.color));
+      els.outline.setAttribute("stroke", "#000000");
+      els.line.setAttribute("stroke-width", "10");
+      els.outline.setAttribute("stroke-width", "14");
       els.g.setAttribute("style", "opacity:1;transition:none;");
       els.row = c.row;
       els.toRow = c.toRow;
@@ -122,6 +162,11 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       if (c.cut) continue;
       if (cableEls.has(c.label)) continue;
       const g = svgEl(NS, "g", {});
+      const outline = svgEl(NS, "line", {
+        x1: String(TERMINAL_X_R), y1: "0",
+        x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
+        stroke: "#000000", "stroke-width": "14", "stroke-linecap": "round",
+      });
       const line = svgEl(NS, "line", {
         x1: String(TERMINAL_X_R), y1: "0",
         x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
@@ -133,22 +178,35 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
         stroke: "#ffffff", "stroke-width": "2", "stroke-linecap": "round",
         "stroke-dasharray": "2 14", opacity: "0.35",
       });
+      const postA = svgEl(NS, "circle", { cx: String(TERMINAL_X_R), cy: "0", r: "11", fill: hex(c.color), stroke: "#000000", "stroke-width": "3" });
+      const postB = svgEl(NS, "circle", { cx: String(VIEW_W - TERMINAL_X_R), cy: "0", r: "11", fill: hex(c.color), stroke: "#000000", "stroke-width": "3" });
       const hit = svgEl(NS, "line", {
         x1: String(TERMINAL_X_R), y1: "0",
         x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
         stroke: "transparent", "stroke-width": "26", "stroke-linecap": "round",
       });
+      line.classList.add("cable-line");
+      outline.classList.add("cable-line");
       hit.classList.add("cursor-scissors");
       hit.style.pointerEvents = "stroke";
-      g.append(line, stripe, hit);
+      g.append(outline, line, stripe, postA, postB, hit);
 
-      const els: CableEls = { g, line, stripe, hit, row: c.row, toRow: c.toRow };
+      const els: CableEls = { g, outline, line, stripe, hit, postA, postB, row: c.row, toRow: c.toRow };
       placeCable(els, total);
 
+      hit.addEventListener("pointerenter", () => {
+        els.line.setAttribute("stroke-width", "12");
+        els.outline.setAttribute("stroke-width", "16");
+      });
+      hit.addEventListener("pointerleave", () => {
+        els.line.setAttribute("stroke-width", "10");
+        els.outline.setAttribute("stroke-width", "14");
+      });
       hit.addEventListener("pointerdown", () => {
         playCut();
         pendingCuts.add(c.label);
         applyCutLook(els);
+        spark(els);
         window.setTimeout(() => {
           if (pendingCuts.has(c.label)) pendingCuts.delete(c.label);
         }, PENDING_CUT_MS);
@@ -178,7 +236,6 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       const color = `#${nameColor(c.name).toString(16).padStart(6, "0")}`;
       el.dot.style.left = `${c.x * 100}%`;
       el.dot.style.top = `${c.y * 100}%`;
-      el.dot.style.borderColor = color;
       el.dot.style.background = color;
       el.label.style.left = `${c.x * 100}%`;
       el.label.style.top = `${c.y * 100}%`;

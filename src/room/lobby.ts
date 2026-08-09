@@ -8,12 +8,20 @@ import { VoiceChannel } from "./voice";
 import { crewmateSvg } from "../ui/crewmate";
 import { startLobbyMusic, stopMusic } from "../ui/music";
 import { playClick, playJoin, playLeave, playReady, playStart } from "../ui/sound";
+import { renderMobileNav, renderSidebar } from "../ui/shell";
+import type { ShellItem } from "../ui/shell";
+import { reglasHtml } from "../ui/reglas";
 
 const ROOM_CAPACITY = 4;
 const MIN_PLAYERS_TO_START = 2;
 const ALIVE_INTERVAL_MS = 1000;
 const ALIVE_TIMEOUT_MS = 3000;
 const CREW_COLORS = ["#ffb4a9", "#2196f3", "#4caf50", "#cdcd00", "#a4ffe8", "#c51111"];
+const ROOM_ITEMS: ShellItem[] = [
+  { label: "Rooms", icon: "meeting_room", href: "/" },
+  { label: "Room", icon: "cable", view: "room" },
+  { label: "Reglas", icon: "menu_book", view: "reglas" },
+];
 
 export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string): void {
   const root = document.getElementById("app");
@@ -28,32 +36,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
 
   root.innerHTML = `
     <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface analog-texture">
-      <nav class="hidden lg:flex flex-col gap-4 p-6 w-64 shrink-0 bg-surface-container border-r-8 border-black block-shadow-md">
-        <div class="mb-6">
-          <h1 class="text-heading-sm font-display text-primary tracking-tighter uppercase stroke-heavy mb-6">cable rush</h1>
-          <div class="flex items-center gap-3 p-3 bg-surface-high border-4 border-black rounded-xl block-shadow">
-            <div class="w-12 h-12 rounded-full border-2 border-black overflow-hidden flex-shrink-0 bg-surface-highest flex items-center justify-center">${crewmateSvg("#ffb4a9", 44)}</div>
-            <div class="overflow-hidden">
-              <div class="text-caption text-secondary truncate uppercase font-bold">${escapeHtml(username)}</div>
-              <div class="text-[12px] text-on-surface-variant truncate uppercase">Rank: Defuser</div>
-            </div>
-          </div>
-        </div>
-        <div class="flex flex-col gap-2">
-          <button type="button" class="flex items-center gap-3 p-3 text-on-surface hover:bg-surface-variant rounded-full border-4 border-transparent hover:border-black transition-transform active:scale-95">
-            <span class="material-symbols-outlined text-xl">home</span>
-            <span class="text-caption uppercase tracking-wide">Home</span>
-          </button>
-          <button type="button" class="flex items-center gap-3 p-3 bg-secondary text-on-secondary font-bold rounded-full border-4 border-black block-shadow">
-            <span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">meeting_room</span>
-            <span class="text-caption uppercase tracking-wide">Room</span>
-          </button>
-        </div>
-        <div class="mt-auto pt-4 border-t-4 border-outline-variant flex justify-between items-center text-caption uppercase">
-          <span class="text-on-surface-variant">SYS.STAT</span>
-          <span class="text-secondary flex items-center gap-1"><div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div> ONLINE</span>
-        </div>
-      </nav>
+      ${renderSidebar(username, ROOM_ITEMS, "room")}
       <main class="flex-1 h-screen flex flex-col overflow-hidden">
         <header class="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-surface-container border-b-8 border-black block-shadow">
           <div class="flex items-center gap-3 min-w-0">
@@ -79,9 +62,9 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
             </a>
           </div>
         </header>
-        <div class="flex-1 overflow-y-auto px-6 lg:px-10 py-6">
-          <div class="max-w-[1200px] mx-auto">
-            <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-6 border-b-4 border-outline-variant pb-4">
+        <div class="flex-1 min-h-0 overflow-y-auto px-6 lg:px-10 py-6">
+          <div class="max-w-[1600px] mx-auto h-full min-h-0 flex flex-col">
+            <div id="lobby-heading" class="flex flex-col md:flex-row justify-between items-end gap-4 border-b-4 border-outline-variant pb-4">
               <div>
                 <h2 class="text-display font-display text-secondary uppercase stroke-heavy">Sala de Espera</h2>
                 <p class="text-body-sm text-on-surface-variant uppercase mt-1">Código: <span class="bg-surface-high px-2 py-1 rounded border-2 border-black font-mono tracking-widest text-tertiary">${escapeHtml(roomId.slice(roomId.indexOf("-") + 1))}</span></p>
@@ -90,20 +73,36 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
                 Esperando jugadores...
               </div>
             </div>
-            <div id="hud" class="hidden mb-6 bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 flex items-center justify-between gap-5">
-              <span id="level" class="text-heading-sm font-display text-secondary uppercase">Nivel 1</span>
-              <span id="progress" class="text-body-sm text-on-surface-variant uppercase">Cortes 0/0</span>
-              <span id="timer" class="text-heading-sm font-display font-bold text-primary uppercase">--:--</span>
-            </div>
-            <div id="lobby-layout" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <section id="left-col" class="lg:col-span-8 flex flex-col gap-6">
-                <div id="stage"></div>
-                <div id="comms" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 relative">
+            <div id="lobby-layout" class="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 mt-6 lg:justify-center lg:items-start">
+              <section id="squad-col" class="flex flex-col gap-4 lg:w-[280px] xl:w-[320px] lg:shrink-0 min-h-0">
+                <div id="hud" class="hidden bg-surface-container border-4 border-black rounded-xl block-shadow-md p-2 flex items-center justify-between gap-2">
+                  <span id="level" class="text-body-sm font-display text-secondary uppercase">Nivel 1</span>
+                  <span id="progress" class="text-caption text-on-surface-variant uppercase">Cortes 0/0</span>
+                  <span id="timer" class="text-body font-display font-bold text-primary uppercase">--:--</span>
+                </div>
+                <div class="flex justify-between items-end">
+                  <h2 class="text-heading font-display text-primary uppercase">Squad</h2>
+                  <span id="squad-count" class="text-subheading text-secondary">0 / 4</span>
+                </div>
+                <div id="players" class="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto"></div>
+                <div id="start-area" class="mt-auto pt-4">
+                  <button
+                    id="start-btn"
+                    disabled
+                    class="pressed w-full bg-secondary text-on-secondary text-heading-sm font-bold py-6 rounded-2xl border-8 border-black block-shadow disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Iniciar partida
+                  </button>
+                  <p id="start-hint" class="text-center text-caption text-on-surface-variant uppercase mt-4">Esperando al menos 2 jugadores...</p>
+                </div>
+              </section>
+              <section id="chat-col" class="flex flex-col lg:w-[280px] xl:w-[340px] lg:shrink-0 min-h-0">
+                <div id="comms" class="flex flex-col flex-1 min-h-0 bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 relative">
                   <h3 class="text-heading-sm font-display text-secondary uppercase mb-2">Comms tácticas</h3>
                   <p id="chat-error" class="hidden text-body-sm text-error font-bold mb-2"></p>
-                  <div id="chat-log" class="space-y-3 max-h-72 overflow-y-auto font-mono text-sm"></div>
+                  <div id="chat-log" class="flex-1 min-h-0 space-y-3 overflow-y-auto font-mono text-sm py-2"></div>
                   <p id="chat-empty" class="text-caption text-on-surface-variant uppercase mt-1">Sin mensajes aún. Coordiná el corte por voz.</p>
-                  <form id="chat-form" class="mt-6 relative">
+                  <form id="chat-form" class="mt-4 relative">
                     <input
                       id="chat-input"
                       maxlength="200"
@@ -117,24 +116,9 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
                   </form>
                 </div>
               </section>
-              <div id="splitter" class="hidden lg:block w-1.5 shrink-0 cursor-col-resize bg-outline-variant rounded-full hover:bg-secondary transition-colors self-stretch"></div>
-              <aside id="right-col" class="lg:col-span-4 flex flex-col gap-6">
-                <div class="flex justify-between items-end">
-                  <h2 class="text-heading font-display text-primary uppercase">Squad</h2>
-                  <span id="squad-count" class="text-subheading text-secondary">0 / 4</span>
-                </div>
-                <div id="players" class="flex flex-col gap-4"></div>
-                <div id="start-area" class="mt-auto pt-6">
-                  <button
-                    id="start-btn"
-                    disabled
-                    class="pressed w-full bg-secondary text-on-secondary text-heading-sm font-bold py-6 rounded-2xl border-8 border-black block-shadow disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Iniciar partida
-                  </button>
-                  <p id="start-hint" class="text-center text-caption text-on-surface-variant uppercase mt-4">Esperando al menos 2 jugadores...</p>
-                </div>
-              </aside>
+              <section id="board-col" class="hidden flex-col lg:flex-1 lg:min-w-0 min-h-0">
+                <div id="stage" class="flex-1 min-h-0"></div>
+              </section>
             </div>
           </div>
         </div>
@@ -163,6 +147,15 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           </a>
         </div>
       </div>
+      <div id="reglas-modal" class="hidden fixed inset-0 z-[55] bg-surface/90 backdrop-blur flex items-center justify-center px-6">
+        <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-8 w-full max-w-lg relative max-h-[80vh] overflow-y-auto">
+          <button id="reglas-close" type="button" class="absolute top-3 right-3 text-on-surface-variant hover:text-error transition-colors">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+          ${reglasHtml()}
+        </div>
+      </div>
+      ${renderMobileNav(ROOM_ITEMS, "room")}
     </div>
   `;
 
@@ -183,11 +176,9 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   const gameoverEl = document.getElementById("gameover");
   const goLevelEl = document.getElementById("go-level");
   const lockedOutEl = document.getElementById("locked-out");
-  const leftCol = document.getElementById("left-col");
-  const rightCol = document.getElementById("right-col");
-  const stageEl = document.getElementById("stage");
+  const boardCol = document.getElementById("board-col");
+  const squadCol = document.getElementById("squad-col");
   const lobbyLayoutEl = document.getElementById("lobby-layout");
-  const splitter = document.getElementById("splitter");
   const roomTitleEl = document.getElementById("room-id");
   const roomCodeEl = document.getElementById("room-code");
   const copyBtn = document.getElementById("copy-code");
@@ -214,6 +205,21 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       void copyRoomCode(copyBtn, code);
     });
   }
+
+  const reglasModalEl = document.getElementById("reglas-modal");
+  function toggleReglas(open: boolean): void {
+    if (reglasModalEl) reglasModalEl.classList.toggle("hidden", !open);
+  }
+  document.querySelectorAll<HTMLElement>('[data-view="reglas"]').forEach((el) => {
+    el.addEventListener("click", () => {
+      playClick();
+      toggleReglas(true);
+    });
+  });
+  document.getElementById("reglas-close")?.addEventListener("click", () => toggleReglas(false));
+  reglasModalEl?.addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) toggleReglas(false);
+  });
 
   const voice = new VoiceChannel();
   let micMuted = true;
@@ -351,7 +357,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       const color = CREW_COLORS[i % CREW_COLORS.length];
       const card = document.createElement("div");
       card.className =
-        "bg-surface-container-high border-8 border-black rounded-xl p-4 block-shadow flex items-center gap-4 relative overflow-hidden";
+        "bg-surface-container-high border-8 border-black rounded-xl p-4 block-shadow flex flex-col relative overflow-hidden";
       const badge = p.id === judgeId ? "DIRECTOR" : started ? "EN CAMPO" : "LISTO";
       const badgeColor = p.id === judgeId
         ? "bg-tertiary text-on-tertiary"
@@ -360,18 +366,20 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           : "bg-surface-variant text-on-surface border-dashed opacity-80";
       card.innerHTML = `
         <div class="absolute inset-0" style="background: ${color}; opacity: 0.08;"></div>
-        <div class="w-16 h-20 shrink-0 flex items-center justify-center">${crewmateSvg(color, 56)}</div>
-        <div class="flex-1 z-10 min-w-0">
-          <p class="font-bold text-body text-on-surface leading-none truncate">${escapeHtml(p.name)} <span class="squad-speaking" title="Hablando"></span></p>
-          <p class="text-caption text-on-surface-variant mt-1 uppercase">${statusBadge(p)}</p>
-          <div class="user-vol-row mt-2 flex items-center gap-2 ${p.id === selfId ? "hidden" : ""}">
-            <button type="button" class="user-mute-btn shrink-0 text-on-surface-variant hover:text-error transition-colors" title="Mutear">
-              <span class="material-symbols-outlined text-[16px]">volume_up</span>
-            </button>
-            <input type="range" min="0" max="100" value="100" class="user-vol-slider flex-1 min-w-0" />
+        <div class="relative z-10 flex items-center gap-3">
+          <div class="w-14 h-16 shrink-0 flex items-center justify-center">${crewmateSvg(color, 44)}</div>
+          <div class="flex-1 min-w-0">
+            <p class="font-bold text-body text-on-surface leading-none truncate">${escapeHtml(p.name)} <span class="squad-speaking" title="Hablando"></span></p>
+            <p class="text-caption text-on-surface-variant mt-0.5 uppercase">${statusBadge(p)}</p>
           </div>
+          <span class="${badgeColor} px-2 py-0.5 border-2 border-black rounded text-caption uppercase shrink-0">${badge}</span>
         </div>
-        <span class="z-10 ${badgeColor} px-3 py-1 border-4 border-black rounded text-caption uppercase shrink-0">${badge}</span>
+        <div class="user-vol-row relative z-10 mt-3 flex items-center gap-2 ${p.id === selfId ? "hidden" : ""}">
+          <button type="button" class="user-mute-btn shrink-0 text-on-surface-variant hover:text-error transition-colors" title="Mutear">
+            <span class="material-symbols-outlined text-[18px]">volume_up</span>
+          </button>
+          <input type="range" min="0" max="100" value="100" class="user-vol-slider flex-1 min-w-0" />
+        </div>
       `;
       const dot = card.querySelector<HTMLElement>(".squad-speaking");
       if (dot) {
@@ -525,39 +533,15 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     started = true;
     mountByRole(selfRole ?? "cutter");
     updateLobbyBanner();
-    const comms = document.getElementById("comms");
-    const startArea = document.getElementById("start-area");
-    if (comms && startArea) startArea.before(comms);
-    lobbyLayoutEl?.classList.add("lg:flex", "lg:flex-row", "lg:items-stretch");
-    lobbyLayoutEl?.classList.remove("lg:grid-cols-12", "lg:gap-6");
-    leftCol?.classList.add("lg:flex-1", "lg:min-w-0");
-    leftCol?.classList.remove("lg:col-span-8", "lg:col-span-9");
-    rightCol?.classList.add("lg:shrink-0", "lg:min-w-0", "lg:w-[var(--panel-w)]");
-    rightCol?.classList.remove("lg:col-span-4", "lg:col-span-3");
-    rightCol?.style.setProperty("--panel-w", "360px");
-    splitter?.classList.remove("hidden");
-    stageEl?.classList.add("board-lg");
-  }
-
-  let dragging = false;
-  if (splitter && rightCol && lobbyLayoutEl) {
-    splitter.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      dragging = true;
-      splitter.setPointerCapture(e.pointerId);
-    });
-    splitter.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      const rect = lobbyLayoutEl.getBoundingClientRect();
-      const width = rect.right - e.clientX;
-      rightCol.style.setProperty("--panel-w", `${Math.min(480, Math.max(260, width))}px`);
-    });
-    splitter.addEventListener("pointerup", () => {
-      dragging = false;
-    });
-    splitter.addEventListener("pointercancel", () => {
-      dragging = false;
-    });
+    document.getElementById("lobby-heading")?.classList.add("hidden");
+    document.getElementById("start-area")?.classList.add("hidden");
+    if (lobbyLayoutEl && boardCol && squadCol) {
+      lobbyLayoutEl.prepend(boardCol);
+      lobbyLayoutEl.append(squadCol);
+    }
+    lobbyLayoutEl?.classList.remove("lg:items-start");
+    boardCol?.classList.remove("hidden");
+    boardCol?.classList.add("flex");
   }
 
   function maybeAnnounceJudge(): void {
