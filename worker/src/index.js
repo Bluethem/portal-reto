@@ -77,12 +77,17 @@ export class JudgeDO {
   async ensureStarted() {
     if (this.started) return;
     this.started = true;
+    const key = this.env.PUBLIC_PORTAL_KEY ?? "";
+    console.log(`[judge] key set=${key.length > 0} len=${key.length} prefix=${key.slice(0, 3)}`);
     console.log("[judge] iniciando Portal client en Workers...");
-    this.portal = new Portal({ apiKey: this.env.PUBLIC_PORTAL_KEY });
+    this.portal = new Portal({ apiKey: key });
     this.index = this.portal.channel("rooms-index", { history: 50 });
     this.index.acquire();
+    this.index.on("status", (s, err) => {
+      console.log("[judge] rooms-index status:", s, err?.message ?? "");
+      if (s === "ready") this.watchRooms();
+    });
     this.index.on("presence", () => this.watchRooms());
-    this.index.on("status", () => this.watchRooms());
     await this.state.storage.setAlarm(Date.now() + 5000);
     console.log("[judge] juez DO listo, observando rooms-index...");
   }
