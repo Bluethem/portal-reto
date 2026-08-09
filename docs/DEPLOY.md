@@ -10,13 +10,13 @@
 | Cliente (Astro estático) | Vercel — `portal-reto.vercel.app` | ✅ desplegado |
 | Juez (Durable Object de Cloudflare) | Workers `portal-reto` — `portal-reto.davidlc226.workers.dev` | ✅ desplegado |
 | Realtime / estado | Portal (`@portalsdk/core`) | ✅ (key + origins configurados) |
-| IA (Groq) — fase 4b | pendiente | ⏳ |
-| Voz (LiveKit) — fase 5 | código implementado; falta deploy de secrets + env en Vercel | 🚧 |
+| IA (Groq) — fase 4b | pistas del director (fallback determinístico sin key) | ✅ |
+| Voz (LiveKit) — fase 5 | sala por room + token en el worker | ✅ |
+| Música / efectos | WebAudio sintetizado, toggle silenciable | ✅ |
 
-**Pendiente de commit** (ver `git status`): fase 5 de voz (`voice.ts`, wiring en
-`lobby.ts`, endpoint `/api/voice-token` en el worker, dep `livekit-client`),
-docs (spec/plan fase 5, este DEPLOY.md, AGENTS.md) y `pantallas/` (mockups, sin
-trackear a propósito).
+**Pendiente de commit** (ver `git status`): el pulido de UI en curso (menú
+Rooms/Reglas, layout de sala, música, tablero, intro) y `pantallas/` (mockups,
+sin trackear a propósito).
 
 ## 2. Arquitectura
 
@@ -54,6 +54,10 @@ trackear a propósito).
   con `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` (WebCrypto, sin deps) para que el
   cliente se conecte a LiveKit Cloud. Es una ruta aparte del DO: no toca la
   lógica del juez.
+- **Ciclo de vida:** el juez deriva `RoomState.members` desde la presencia
+  (`role` desde el `directorId`), publica **pistas del director** (Groq con
+  fallback) y **libera la sala** si se queda vacía ~3 s. Un jugador que recarga
+  la página reconecta con su mismo rol gracias a `members`.
 
 ### Archivos
 
@@ -147,7 +151,7 @@ CLI de Portal: `npx @portalsdk/cli login` (OAuth). Ojo: el `.env` tiene
 |---|---|
 | `PUBLIC_PORTAL_KEY` | cliente + juez (publishable) |
 | `PORTAL_SECRET` (o `PORTALSECRET`) | secret de Portal (CLI/admin) |
-| `GROQ_API_KEY`, `GROQ_MODEL` | IA fase 4b (aún sin uso) |
+| `GROQ_API_KEY`, `GROQ_MODEL` | IA fase 4b — pistas del director (fallback determinístico sin key) |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | voz — secrets del worker (`.dev.vars` / `wrangler secret put`), **nunca** al bundle |
 | `PUBLIC_LIVEKIT_URL` | voz — wss de LiveKit Cloud (cliente) |
 | `PUBLIC_VOICE_TOKEN_URL` | voz — endpoint `/api/voice-token` del worker (cliente; en local `http://localhost:8787`, en prod el dominio del worker) |
@@ -156,7 +160,7 @@ CLI de Portal: `npx @portalsdk/cli login` (OAuth). Ojo: el `.env` tiene
 
 ```bash
 npm install
-cp .env.example .env        # completar PUBLIC_PORTAL_KEY + LIVEKIT_* del cliente
+cp .env.example .env        # PUBLIC_PORTAL_KEY + LIVEKIT_* del cliente (+ GROQ_API_KEY/GROQ_MODEL para pistas)
 # .env: PUBLIC_LIVEKIT_URL=wss://...  y  PUBLIC_VOICE_TOKEN_URL=http://localhost:8787
 # worker/.dev.vars: PUBLIC_PORTAL_KEY + LIVEKIT_API_KEY + LIVEKIT_API_SECRET
 cd worker && npx wrangler dev --port 8787   # juez DO + /api/voice-token (NO correr agent:room a la vez)
@@ -195,8 +199,9 @@ npx @portalsdk/cli origins list --env <envId>
 
 ## 10. Roadmap / siguiente
 
-- **Fase 4b (IA Groq)**: hints del director + briefing (diferido; la IA no decide
-  lógica, el generador ya expone `structured: Rule[]`).
-- **Fase 5 (voz)**: ✅ implementado con LiveKit (ver secciones 3, 5, 6 y 7). Falta:
-  `wrangler secret put` de LiveKit + redeploy del worker, y env de voz en Vercel.
+- **Fase 4b (IA Groq)**: ✅ pistas del director con fallback determinístico. Falta:
+  el briefing completo del manual (redacción por IA).
+- **Fase 5 (voz)**: ✅ implementado con LiveKit (ver secciones 3, 5, 6 y 7).
+- **Música / UI**: ✅ música de lobby silenciable, menú Rooms/Reglas, layout
+  Board|Chat|Squad, nave decorativa.
 - **Fase 6**: test 4 jugadores en producción (Vercel + worker desplegados).

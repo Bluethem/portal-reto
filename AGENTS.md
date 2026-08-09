@@ -8,7 +8,7 @@ El timer global decide el final (score = nivel alcanzado).
 
 ## Estado
 
-**Fases 1-5 implementadas** (IA Groq, fase 4b, diferida).
+**Fases 1-5 + 4b (hints con Groq) implementadas.**
 
 **Fase 1:** username → rooms → lobby → juez aleatorio por host. Canales en uso:
 `rooms-index` (host-managed, heartbeat ~5s, TTL 10s) y `room-<id>` (presencia +
@@ -36,12 +36,23 @@ se renderiza por colores; el `label` queda interno. Además: corte optimista
 al culpable al cortar mal, y globales `blind`/`lockCut` (periódicos desde el
 nivel 5, cada ~25 s).
 
-**Fase 4b (IA Groq — comodines del director, parcial):** el director tiene un
+**Fase 4b (IA Groq — comodines del director):** el director tiene un
 botón "Pedir pista" (5 comodines por partida + auto-pista a <1 min, consume 1).
 La lógica de la pista es determinística (revela el siguiente cable correcto); Groq
-solo la redacta en `agent/ia/groq.ts` con fallback al template. El briefing del
-manual (redacción del manual completo) sigue pendiente. Sin `GROQ_API_KEY` en el
-worker → las pistas usan el texto determinístico.
+solo la redacta en `agent/ia/groq.ts` con fallback al template. Sin
+`GROQ_API_KEY` → las pistas usan el texto determinístico. El briefing del manual
+(redacción del manual completo) sigue pendiente.
+
+**UI y vida de la sala:** menú con tabs **Rooms** (todas las salas, filtro
+All/Public/Private; las privadas ocultan el código y muestran "Usá el código
+para unirte") y **Reglas** (guía de reglas y efectos). Sidebar compartida
+(`src/ui/shell.ts`) con **botón de música** silenciable (persistente en
+localStorage). Sala de espera **Squad | Chat**; en juego **Board | Chat | Squad**
+con el tablero llenando la altura. Decoración Among Us: nave de fondo tenue y
+estado vacío ilustrado (`src/ui/ship.ts`). **Cierre y reconexión:** el juez
+publica `RoomState.members` (rol derivado de `directorId`) y **libera la sala si
+se queda vacía ~3 s**; un jugador que recarga la página **reconecta con su mismo
+rol** (director → manual, cortador → tablero) en vez de quedar locked-out.
 
 **Juez — dos implementaciones de la misma lógica:**
 - `agent/room/agent.ts` — proceso Node local (TS), un `Judge` por room con
@@ -56,16 +67,16 @@ Cloudflare expone `/api/voice-token` (JWT HS256 con WebCrypto); el cliente usa
 y el squad muestra al hablante activo. Sin credenciales → "Voz no disponible" y
 el juego sigue por chat.
 
-Pendiente: fases 4b (IA Groq) y 6 (despliegue + test 4 jugadores). Cada fase es
-demo-able por sí sola.
+Pendiente: fase 6 (despliegue + test 4 jugadores) y el briefing completo del
+manual por IA (4b). Cada fase es demo-able por sí sola.
 
 Espec y planes (superpowers):
 - `docs/superpowers/specs/*.md` — diseño v2 + fases 2b (board 2D), 3
-  (procedural), 4 (efectos) y 5 (voz)
+  (procedural), 4 (efectos), 5 (voz) y cierre/reconexión
 - `docs/superpowers/plans/*.md` — planes por fase con checkboxes de progreso
 
-Próximo paso cuando se retome la implementación: fase 4b (hints/briefing del
-director con Groq) o fase 6 (despliegue + test 4 jugadores).
+Próximo paso cuando se retome la implementación: fase 6 (despliegue + test 4
+jugadores); opcional, briefing del manual (4b).
 
 ## Development
 
@@ -89,8 +100,8 @@ Typecheck:
 
 - `PUBLIC_PORTAL_KEY` — cliente (`import.meta.env.PUBLIC_*` en el bundle Astro)
 - `PORTAL_SECRET` — sin uso por ahora (el SDK solo usa la publishable key)
-- `GROQ_API_KEY`, `GROQ_MODEL` — agente (hints/briefing del director; fase 4b,
-  aun sin uso)
+- `GROQ_API_KEY`, `GROQ_MODEL` — agente (redacción de pistas del director, fase
+  4b; sin la key se usa el fallback determinístico)
 - `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` — voz (secrets del worker / `.dev.vars`)
 - `PUBLIC_LIVEKIT_URL`, `PUBLIC_VOICE_TOKEN_URL` — voz (cliente; wss de LiveKit
   Cloud y endpoint `/api/voice-token` del worker)
@@ -108,7 +119,9 @@ Typecheck:
 - @portalsdk/core — presencia, canales y estado compartido (WebSocket directo al cliente); NO trae voz
 - SVG + DOM — tablero 2D de cables (three.js eliminado)
 - Agente Node o Cloudflare Workers DO — juez multi-room + generación de niveles
+- Groq (IA) — redacción de pistas del director (fase 4b; fallback determinístico)
 - LiveKit (WebRTC) — comunicación por voz (fase 5)
+- WebAudio API — música de lobby y efectos de sonido sintetizados
 
 ## Concepto del juego
 
@@ -146,17 +159,18 @@ Typecheck:
 ## Estructura de carpetas
 
     src/
-    ├── menu/          # lista de rooms, crear/unirse (Portal)
+    ├── menu/          # menú Rooms/Reglas, crear/unirse (Portal)
     ├── room/          # lobby + roles + HUD del juego
     ├── board/         # tablero 2D de cables (SVG)
-    ├── director/      # vista del manual para el director
+    ├── director/      # manual del director + asistente de pistas
     ├── portal/        # reuso: client, types, presencia
     ├── shared/        # reuso: identity, username, id
+    ├── ui/            # SVG/componentes: crewmate, ship, shell, música, sonidos
     ├── pages/         # index.astro (menú) y room.astro (sala)
-    └── styles/        # theme.css (tema Defuse Protocol, Tailwind v4)
+    └── styles/        # theme.css (tema Among Us, Tailwind v4)
     agent/room/        # agente juez (Node) + generador de niveles
+    agent/ia/          # redacción de pistas del director con Groq (fase 4b)
     worker/            # juez como Durable Object de Cloudflare (experimental)
-    agent/ia/          # hints/briefing con Groq (fase 4b, diferida)
 
 ## Fases de construcción (cada una demo-able)
 
@@ -167,7 +181,7 @@ Typecheck:
 | 2b | Tablero 2D SVG (reemplaza three.js), corte animado | hecho |
 | 3 | Generación procedural: seed por nivel, reglas crecientes, solución única | hecho |
 | 4 | Efectos de estado: trabas deterministas (freeze, blind, lockCut) | hecho |
-| 4b | IA (Groq): comodines de pistas del director (parcial, sin briefing) | parcial |
+| 4b | IA (Groq): comodines de pistas del director | hecho (briefing pendiente) |
 | 5 | Voz WebRTC (LiveKit) | hecho |
 | 6 | Despliegue Vercel + juez (Render o CF Workers) + test 4 jugadores | pendiente |
 

@@ -12,21 +12,27 @@ oculto.
    expone menú/room: `rooms-index` lista las rooms activas (lo mantiene el host) y
    `room-<id>` lleva el estado del juego.
 2. [`src/menu/menu.ts`](src/menu/menu.ts) + [`src/room/lobby.ts`](src/room/lobby.ts)
-   montan el menú (crear/unirse por código) y el lobby (presencia, juez aleatorio
-   del host, iniciar, lock al arrancar).
+   montan el menú (tabs **Rooms** con filtro All/Public/Private y **Reglas**,
+   crear/unirse por código) y la sala: espera **Squad | Chat**, juego
+   **Board | Chat | Squad**, juez aleatorio del host, iniciar, lock al arrancar.
 3. [`agent/room/generator.ts`](agent/room/generator.ts) genera cada nivel de forma
    determinística por seed: tablero (cables diagonales que se cruzan), reglas
    condicionales por colores y solución única validada por un solver.
 4. El juez — [`agent/room/agent.ts`](agent/room/agent.ts) local o el
    [`worker/src/index.js`](worker/src/index.js) (Durable Object de Cloudflare) —
    es la única fuente de verdad: valida cada corte contra el orden oculto, lleva el
-   timer (3:00, +1:00 por nivel, −15 s por corte mal) y aplica los efectos de
-   estado desde el nivel 4. **Los clientes jamás reciben el orden.**
+   timer (3:00, +1:00 por nivel, −15 s por corte mal), aplica los efectos de
+   estado desde el nivel 4 y sirve **pistas al director** (Groq con fallback).
+   **Los clientes jamás reciben el orden.** Libera la sala si se queda vacía y
+   publica `members` para que un jugador **reconecte con su mismo rol**.
 5. [`src/board/board.ts`](src/board/board.ts) renderiza el tablero SVG 2D con corte
    optimista (feedback al instante, el agente reconcilia) y cursores en vivo con
    smoothing.
 6. [`src/director/director.ts`](src/director/director.ts) muestra el manual por
-   colores (las reglas, no el orden) para que el director deduzca y dicte.
+   colores (las reglas, no el orden) para que el director deduzca y dicte, con un
+   **asistente de pistas** ("Pedir pista", 5 comodines).
+7. Música de lobby sintetizada con botón para **silenciarla** (persistente) en la
+   sidebar compartida ([`src/ui/`](src/ui/)).
 
 Deliberadamente **no hay** base de datos, caché de mensajes, webhook ni motor de
 workflows: Portal provee el realtime (presencia, canales, historial, estado) y el
@@ -38,7 +44,7 @@ Necesitás Node ≥ 22.12 y un entorno de Portal con la publishable key.
 
 ```bash
 npm install
-cp .env.example .env   # y completar PUBLIC_PORTAL_KEY
+cp .env.example .env   # completar PUBLIC_PORTAL_KEY (y GROQ_API_KEY/GROQ_MODEL para pistas IA)
 npm run agent:room     # juez local (o usá el DO de Cloudflare)
 npm run dev            # http://localhost:4321
 ```
