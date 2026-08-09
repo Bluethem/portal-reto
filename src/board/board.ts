@@ -1,5 +1,6 @@
 import type { RoomClient } from "../portal/client";
 import type { Cable, StateEffect } from "../portal/types";
+import { playCut, playWrong } from "../ui/sound";
 
 const VIEW_W = 800;
 const VIEW_H = 460;
@@ -31,10 +32,10 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   const NS = "http://www.w3.org/2000/svg";
   const wrap = document.createElement("div");
   wrap.style.position = "relative";
-  const svg = svgEl(NS, "svg", { viewBox: `0 0 ${VIEW_W} ${VIEW_H}`, width: "100%", height: "100%", style: "display:block;background:#0b0e14;border-radius:16px;border:1px solid #2a2f3a;box-shadow:0 12px 32px rgb(0 0 0 / 0.14);" });
+  const svg = svgEl(NS, "svg", { viewBox: `0 0 ${VIEW_W} ${VIEW_H}`, width: "100%", height: "100%", style: "display:block;background:#0b1326;border-radius:16px;border:4px solid #000000;box-shadow:0 12px 32px rgb(0 0 0 / 0.14);" });
 
-  const panelL = svgEl(NS, "rect", { x: String(PANEL_X), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "#1a1f2b", stroke: "#2a2f3a" });
-  const panelR = svgEl(NS, "rect", { x: String(VIEW_W - PANEL_X - PANEL_W), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "#1a1f2b", stroke: "#2a2f3a" });
+  const panelL = svgEl(NS, "rect", { x: String(PANEL_X), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "#171f33", stroke: "#000000" });
+  const panelR = svgEl(NS, "rect", { x: String(VIEW_W - PANEL_X - PANEL_W), y: String(PANEL_Y), width: String(PANEL_W), height: String(PANEL_H), rx: "12", fill: "#171f33", stroke: "#000000" });
   svg.append(panelL, panelR);
 
   const cableEls = new Map<string, CableEls>();
@@ -53,7 +54,7 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
   container.appendChild(wrap);
 
   const nameColors = new Map<string, number>();
-  const palette = [0x22c55e, 0xf97316, 0x8b5cf6, 0x14b8a6];
+  const palette = [0xffb4a9, 0x2196f3, 0x4caf50, 0xcdcd00];
 
   function nameColor(id: string): number {
     if (!nameColors.has(id)) nameColors.set(id, palette[nameColors.size % palette.length]);
@@ -103,6 +104,10 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
         els.g.setAttribute("style", "transition:opacity 600ms ease 250ms;opacity:0;");
         if (!c) els.g.remove();
         if (c && c.cut) pendingCuts.delete(c.label);
+        if (c && !c.cut && pendingCuts.has(c.label)) {
+          pendingCuts.delete(c.label);
+          playWrong();
+        }
         continue;
       }
       els.hit.style.pointerEvents = "stroke";
@@ -132,8 +137,8 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
         x1: String(TERMINAL_X_R), y1: "0",
         x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
         stroke: "transparent", "stroke-width": "26", "stroke-linecap": "round",
-        style: "cursor:pointer;",
       });
+      hit.classList.add("cursor-scissors");
       hit.style.pointerEvents = "stroke";
       g.append(line, stripe, hit);
 
@@ -141,6 +146,7 @@ export function mountBoard(container: HTMLElement, client: RoomClient, selfName:
       placeCable(els, total);
 
       hit.addEventListener("pointerdown", () => {
+        playCut();
         pendingCuts.add(c.label);
         applyCutLook(els);
         window.setTimeout(() => {

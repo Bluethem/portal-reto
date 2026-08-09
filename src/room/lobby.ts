@@ -3,10 +3,12 @@ import type { ChatEntry, Role } from "../portal/types";
 import { getUsername } from "../shared/username";
 import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
+import { crewmateSvg } from "../ui/crewmate";
 
 const REQUIRED_PLAYERS = 4;
 const ALIVE_INTERVAL_MS = 1000;
 const ALIVE_TIMEOUT_MS = 3000;
+const CREW_COLORS = ["#ffb4a9", "#2196f3", "#4caf50", "#cdcd00", "#a4ffe8", "#c51111"];
 
 export function bootRoom(roomId: string, isHost: boolean, roomName: string): void {
   const root = document.getElementById("app");
@@ -16,123 +18,142 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const client = joinRoom(roomId, { name: username, host: isHost, role: null });
 
   root.innerHTML = `
-    <div class="min-h-screen flex flex-col">
-      <header class="bg-slate-gray w-full flex-none">
-        <div class="flex items-center justify-between w-full px-10 py-2 max-w-[1200px] mx-auto h-16">
-          <div class="flex items-center gap-4 min-w-0">
-            <span class="text-heading-sm font-extrabold text-sunbeam-yellow lowercase shrink-0">cable rush</span>
-            <span id="room-id" class="text-body-sm text-paper-white truncate hidden md:inline">Operación: ${escapeHtml(roomName)}</span>
-            <span class="flex items-center gap-1 bg-paper-white/10 rounded-full px-3 py-1 shrink-0">
-              <span class="material-symbols-outlined text-[16px] text-sunbeam-yellow">key</span>
-              <span id="room-code" class="text-body-sm font-bold text-sunbeam-yellow tracking-widest">--</span>
-              <button id="copy-code" type="button" title="Copiar código" class="text-paper-white hover:text-sunbeam-yellow transition-colors">
+    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface analog-texture">
+      <nav class="hidden lg:flex flex-col gap-4 p-6 w-64 shrink-0 bg-surface-container border-r-8 border-black block-shadow-md">
+        <div class="mb-6">
+          <h1 class="text-heading-sm font-display text-primary tracking-tighter uppercase stroke-heavy mb-6">cable rush</h1>
+          <div class="flex items-center gap-3 p-3 bg-surface-high border-4 border-black rounded-xl block-shadow">
+            <div class="w-12 h-12 rounded-full border-2 border-black overflow-hidden flex-shrink-0 bg-surface-highest flex items-center justify-center">${crewmateSvg("#ffb4a9", 44)}</div>
+            <div class="overflow-hidden">
+              <div class="text-caption text-secondary truncate uppercase font-bold">${escapeHtml(username)}</div>
+              <div class="text-[12px] text-on-surface-variant truncate uppercase">Rank: Defuser</div>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <button type="button" class="flex items-center gap-3 p-3 text-on-surface hover:bg-surface-variant rounded-full border-4 border-transparent hover:border-black transition-transform active:scale-95">
+            <span class="material-symbols-outlined text-xl">home</span>
+            <span class="text-caption uppercase tracking-wide">Home</span>
+          </button>
+          <button type="button" class="flex items-center gap-3 p-3 bg-secondary text-on-secondary font-bold rounded-full border-4 border-black block-shadow">
+            <span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">meeting_room</span>
+            <span class="text-caption uppercase tracking-wide">Room</span>
+          </button>
+        </div>
+        <div class="mt-auto pt-4 border-t-4 border-outline-variant flex justify-between items-center text-caption uppercase">
+          <span class="text-on-surface-variant">SYS.STAT</span>
+          <span class="text-secondary flex items-center gap-1"><div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div> ONLINE</span>
+        </div>
+      </nav>
+      <main class="flex-1 h-screen flex flex-col overflow-hidden">
+        <header class="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-surface-container border-b-8 border-black block-shadow">
+          <div class="flex items-center gap-3 min-w-0">
+            <span id="room-id" class="text-body-sm text-on-surface truncate">Operación: ${escapeHtml(roomName)}</span>
+            <span class="flex items-center gap-1 bg-surface-high border-2 border-black rounded-full px-3 py-1 shrink-0">
+              <span class="material-symbols-outlined text-[16px] text-secondary">key</span>
+              <span id="room-code" class="text-body-sm font-bold text-secondary tracking-widest">--</span>
+              <button id="copy-code" type="button" title="Copiar código" class="text-on-surface hover:text-secondary transition-colors">
                 <span class="material-symbols-outlined text-[16px]">content_copy</span>
               </button>
             </span>
           </div>
           <div class="flex items-center gap-3 shrink-0">
-            <div class="relative">
-              <div class="flex items-center gap-2 bg-paper-white/10 rounded-full px-3 py-1">
-                <span class="material-symbols-outlined text-[16px] text-sunbeam-yellow">person</span>
-                <span id="user-name" class="text-body-sm text-paper-white hidden sm:inline">${escapeHtml(username)}</span>
-                <button id="mic-btn" type="button" title="Micro" class="text-paper-white hover:text-sunbeam-yellow transition-colors">
-                  <span id="mic-icon" class="material-symbols-outlined text-[20px]">mic</span>
-                </button>
-                <button id="deafen-btn" type="button" title="Ensordecer" class="text-paper-white hover:text-sunbeam-yellow transition-colors">
-                  <span id="deafen-icon" class="material-symbols-outlined text-[20px]">headphones</span>
-                </button>
-              </div>
-              <div id="mic-menu" class="hidden absolute right-0 top-full mt-2 w-60 bg-paper-white rounded-card shadow-pill p-4 z-20">
-                <div class="flex items-center justify-between mb-3">
-                  <span class="text-heading-sm text-carbon font-bold">Micro</span>
-                  <span class="text-caption text-slate-gray">Voz en fase 5</span>
-                </div>
-                <button id="mic-toggle" type="button" class="w-full flex items-center justify-between bg-fog rounded-card px-4 py-2 text-body-sm text-carbon hover:bg-surface-container transition-colors">
-                  <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">mic</span> Sonido</span>
-                  <span id="mic-state" class="font-bold text-electric-violet">ACTIVO</span>
-                </button>
-              </div>
-            </div>
-            <a id="leave-btn" href="/" class="text-body-sm text-paper-white hover:text-sunbeam-yellow transition-colors flex items-center gap-2 shrink-0">
+            <span id="user-name" class="text-body-sm text-on-surface hidden sm:inline uppercase">${escapeHtml(username)}</span>
+            <button id="mic-btn" type="button" title="Micro" class="w-10 h-10 flex items-center justify-center bg-surface-high rounded-full border-4 border-black hover:bg-surface-variant transition-colors">
+              <span id="mic-icon" class="material-symbols-outlined text-[20px] text-on-surface">mic</span>
+            </button>
+            <button id="deafen-btn" type="button" title="Ensordecer" class="w-10 h-10 flex items-center justify-center bg-surface-high rounded-full border-4 border-black hover:bg-surface-variant transition-colors">
+              <span id="deafen-icon" class="material-symbols-outlined text-[20px] text-on-surface">headphones</span>
+            </button>
+            <a id="leave-btn" href="/" class="pressed text-body-sm text-on-surface hover:text-secondary transition-colors flex items-center gap-2 shrink-0 bg-surface-high px-3 py-2 rounded-full border-4 border-black">
               <span class="material-symbols-outlined text-[18px]">logout</span> Salir
             </a>
           </div>
-        </div>
-      </header>
-      <main class="flex-1 w-full max-w-[1200px] mx-auto px-10 py-7">
-        <div id="lobby-layout" class="grid grid-cols-1 lg:grid-cols-12 gap-7">
-          <section id="left-col" class="lg:col-span-8 flex flex-col gap-6">            <div id="lobby-state" class="bg-surface-container rounded-card px-6 py-2 text-subheading text-carbon font-bold">
-              Esperando jugadores...
+        </header>
+        <div class="flex-1 overflow-y-auto px-6 lg:px-10 py-6">
+          <div class="max-w-[1200px] mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-6 border-b-4 border-outline-variant pb-4">
+              <div>
+                <h2 class="text-display font-display text-secondary uppercase stroke-heavy">Sala de Espera</h2>
+                <p class="text-body-sm text-on-surface-variant uppercase mt-1">Código: <span class="bg-surface-high px-2 py-1 rounded border-2 border-black font-mono tracking-widest text-tertiary">${escapeHtml(roomId.slice(roomId.indexOf("-") + 1))}</span></p>
+              </div>
+              <div id="lobby-state" class="text-right text-heading-sm text-primary font-bold uppercase animate-pulse">
+                Esperando jugadores...
+              </div>
             </div>
-            <div id="hud" class="hidden bg-paper-white rounded-card shadow-pill p-6 flex items-center justify-between gap-5">
-              <span id="level" class="text-heading-sm text-carbon font-bold">Nivel 1</span>
-              <span id="progress" class="text-body-sm text-on-surface-variant">Cortes 0/0</span>
-              <span id="timer" class="text-heading-sm font-extrabold text-carbon">--:--</span>
+            <div id="hud" class="hidden mb-6 bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 flex items-center justify-between gap-5">
+              <span id="level" class="text-heading-sm font-display text-secondary uppercase">Nivel 1</span>
+              <span id="progress" class="text-body-sm text-on-surface-variant uppercase">Cortes 0/0</span>
+              <span id="timer" class="text-heading-sm font-display font-bold text-primary uppercase">--:--</span>
             </div>
-            <div id="stage"></div>
-            <div id="comms" class="bg-sand rounded-[16px] rounded-bl-none p-6 relative">
-              <h3 class="text-heading-sm text-carbon font-bold mb-2">Comms tácticas</h3>
-              <p id="chat-error" class="hidden text-body-sm text-error font-bold mb-2"></p>
-              <div id="chat-log" class="space-y-3 max-h-72 overflow-y-auto"></div>
-              <p id="chat-empty" class="text-caption text-slate-gray mt-1">Sin mensajes aún. Coordiná el corte por voz.</p>
-              <form id="chat-form" class="mt-6 relative">
-                <input
-                  id="chat-input"
-                  maxlength="200"
-                  placeholder="Envía un mensaje..."
-                  autocomplete="off"
-                  class="w-full bg-fog border border-outline-variant rounded-[6px] py-1 pl-6 pr-12 text-body-sm text-carbon placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-electric-violet"
-                />
-                <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 text-electric-violet">
-                  <span class="material-symbols-outlined">send</span>
-                </button>
-              </form>
+            <div id="lobby-layout" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <section id="left-col" class="lg:col-span-8 flex flex-col gap-6">
+                <div id="stage"></div>
+                <div id="comms" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 relative">
+                  <h3 class="text-heading-sm font-display text-secondary uppercase mb-2">Comms tácticas</h3>
+                  <p id="chat-error" class="hidden text-body-sm text-error font-bold mb-2"></p>
+                  <div id="chat-log" class="space-y-3 max-h-72 overflow-y-auto font-mono text-sm"></div>
+                  <p id="chat-empty" class="text-caption text-on-surface-variant uppercase mt-1">Sin mensajes aún. Coordiná el corte por voz.</p>
+                  <form id="chat-form" class="mt-6 relative">
+                    <input
+                      id="chat-input"
+                      maxlength="200"
+                      placeholder="Envía un mensaje..."
+                      autocomplete="off"
+                      class="w-full bg-surface-high border-4 border-black rounded-lg py-1 pl-6 pr-12 text-body-sm text-carbon placeholder:text-slate-gray focus:outline-none focus:border-secondary"
+                    />
+                    <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 text-secondary">
+                      <span class="material-symbols-outlined">send</span>
+                    </button>
+                  </form>
+                </div>
+              </section>
+              <div id="splitter" class="hidden lg:block w-1.5 shrink-0 cursor-col-resize bg-outline-variant rounded-full hover:bg-secondary transition-colors self-stretch"></div>
+              <aside id="right-col" class="lg:col-span-4 flex flex-col gap-6">
+                <div class="flex justify-between items-end">
+                  <h2 class="text-heading font-display text-primary uppercase">Squad</h2>
+                  <span id="squad-count" class="text-subheading text-secondary">0 / 4</span>
+                </div>
+                <div id="players" class="flex flex-col gap-4"></div>
+                <div id="start-area" class="mt-auto pt-6">
+                  <button
+                    id="start-btn"
+                    disabled
+                    class="pressed w-full bg-secondary text-on-secondary text-heading-sm font-bold py-6 rounded-2xl border-8 border-black block-shadow disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Iniciar partida
+                  </button>
+                  <p id="start-hint" class="text-center text-caption text-on-surface-variant uppercase mt-4">Esperando al equipo completo.</p>
+                </div>
+              </aside>
             </div>
-          </section>
-          <div id="splitter" class="hidden lg:block w-1.5 shrink-0 cursor-col-resize bg-outline-variant rounded-full hover:bg-electric-violet transition-colors self-stretch"></div>
-          <aside id="right-col" class="lg:col-span-4 flex flex-col gap-7">
-            <div class="flex justify-between items-end">
-              <h2 class="text-heading text-carbon font-bold">Squad</h2>
-              <span id="squad-count" class="text-subheading text-electric-violet">0 / 4</span>
-            </div>
-            <div id="players" class="flex flex-col gap-4"></div>
-            <div id="start-area" class="mt-auto pt-7">
-              <button
-                id="start-btn"
-                disabled
-                class="w-full bg-electric-violet text-paper-white text-heading-sm font-bold py-7 rounded-[34px] shadow-pill hover:bg-secondary-container transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Iniciar partida
-              </button>
-              <p id="start-hint" class="text-center text-caption text-slate-gray mt-4">Esperando al equipo completo.</p>
-            </div>
-          </aside>
-        </div>
-        <div id="gameover" class="hidden fixed inset-0 z-50 bg-surface/90 backdrop-blur flex items-center justify-center px-10">
-          <div class="bg-paper-white rounded-card shadow-pill p-10 max-w-md w-full text-center">
-            <span class="material-symbols-outlined text-[56px] text-error">bolt</span>
-            <h2 class="text-display text-carbon">Operación terminada</h2>
-            <p class="text-body-sm text-on-surface-variant mt-2">El equipo llegó hasta el</p>
-            <div class="mt-6 bg-sand rounded-[16px] p-6">
-              <p class="text-caption text-slate-gray">Nivel alcanzado</p>
-              <p id="go-level" class="text-display text-carbon font-extrabold">1</p>
-            </div>
-            <a href="/" class="block mt-7 w-full bg-electric-violet text-paper-white text-body font-bold py-3 rounded-full shadow-pill hover:bg-secondary-container transition-colors">
-              Volver al menú
-            </a>
-          </div>
-        </div>
-        <div id="locked-out" class="hidden fixed inset-0 z-50 bg-surface/90 backdrop-blur flex items-center justify-center px-10">
-          <div class="bg-paper-white rounded-card shadow-pill p-10 max-w-md w-full text-center">
-            <span class="material-symbols-outlined text-[56px] text-sunbeam-yellow">lock</span>
-            <h2 class="text-display text-carbon">Partida en curso</h2>
-            <p class="text-body-sm text-on-surface-variant mt-2">La sala ya comenzó y no acepta más jugadores.</p>
-            <a href="/" class="block mt-7 w-full bg-electric-violet text-paper-white text-body font-bold py-3 rounded-full shadow-pill hover:bg-secondary-container transition-colors">
-              Volver al menú
-            </a>
           </div>
         </div>
       </main>
+      <div id="gameover" class="hidden fixed inset-0 z-50 bg-surface/90 backdrop-blur flex items-center justify-center px-6">
+        <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 max-w-md w-full text-center">
+          <span class="material-symbols-outlined text-[56px] text-error">bolt</span>
+          <h2 class="text-display font-display text-on-surface uppercase">Operación terminada</h2>
+          <p class="text-body-sm text-on-surface-variant uppercase mt-2">El equipo llegó hasta el</p>
+          <div class="mt-6 bg-surface-high border-4 border-black rounded-xl p-6">
+            <p class="text-caption text-on-surface-variant uppercase">Nivel alcanzado</p>
+            <p id="go-level" class="text-display font-display text-primary font-extrabold">1</p>
+          </div>
+          <a href="/" class="pressed block mt-7 w-full bg-primary text-on-primary text-body font-bold py-3 rounded-full border-4 border-black block-shadow transition-colors uppercase">
+            Volver al menú
+          </a>
+        </div>
+      </div>
+      <div id="locked-out" class="hidden fixed inset-0 z-50 bg-surface/90 backdrop-blur flex items-center justify-center px-6">
+        <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 max-w-md w-full text-center">
+          <span class="material-symbols-outlined text-[56px] text-tertiary">lock</span>
+          <h2 class="text-display font-display text-on-surface uppercase">Partida en curso</h2>
+          <p class="text-body-sm text-on-surface-variant uppercase mt-2">La sala ya comenzó y no acepta más jugadores.</p>
+          <a href="/" class="pressed block mt-7 w-full bg-primary text-on-primary text-body font-bold py-3 rounded-full border-4 border-black block-shadow transition-colors uppercase">
+            Volver al menú
+          </a>
+        </div>
+      </div>
     </div>
   `;
 
@@ -161,10 +182,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const roomCodeEl = document.getElementById("room-code");
   const copyBtn = document.getElementById("copy-code");
   const micBtn = document.getElementById("mic-btn");
-  const micMenuEl = document.getElementById("mic-menu");
   const micIconEl = document.getElementById("mic-icon");
-  const micToggle = document.getElementById("mic-toggle");
-  const micStateEl = document.getElementById("mic-state");
   const deafenBtn = document.getElementById("deafen-btn");
   const deafenIconEl = document.getElementById("deafen-icon");
 
@@ -181,34 +199,24 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   let deafened = false;
 
   function refreshAudio(): void {
-    if (!micIconEl || !micStateEl || !deafenIconEl) return;
+    if (!micIconEl || !deafenIconEl) return;
     const muted = micMuted || deafened;
     micIconEl.textContent = muted ? "mic_off" : "mic";
     micIconEl.classList.toggle("text-error", muted);
-    micStateEl.textContent = muted ? "MUTE" : "ACTIVO";
-    micStateEl.classList.toggle("text-error", muted);
-    micStateEl.classList.toggle("text-electric-violet", !muted);
+    micIconEl.classList.toggle("text-on-surface", !muted);
     deafenIconEl.textContent = deafened ? "hearing_disabled" : "headphones";
     deafenIconEl.classList.toggle("text-error", deafened);
+    deafenIconEl.classList.toggle("text-on-surface", !deafened);
   }
 
-  if (micBtn && micMenuEl) {
-    micBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      micMenuEl.classList.toggle("hidden");
-    });
-    document.addEventListener("click", () => micMenuEl.classList.add("hidden"));
-  }
-  if (micToggle) {
-    micToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
+  if (micBtn) {
+    micBtn.addEventListener("click", () => {
       micMuted = !micMuted;
       refreshAudio();
     });
   }
   if (deafenBtn) {
-    deafenBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
+    deafenBtn.addEventListener("click", () => {
       deafened = !deafened;
       refreshAudio();
     });
@@ -244,31 +252,37 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   function renderPlayers(list: { id: string; name: string; host: boolean }[]): void {
     if (!playersEl) return;
     playersEl.replaceChildren();
-    for (const p of list.slice(0, REQUIRED_PLAYERS)) {
+    for (const [i, p] of list.slice(0, REQUIRED_PLAYERS).entries()) {
+      const color = CREW_COLORS[i % CREW_COLORS.length];
       const card = document.createElement("div");
       card.className =
-        "bg-surface-highest rounded-card p-4 flex items-center justify-between border-l-[6px] border-electric-violet";
-      const icon = p.host ? "host" : "person";
+        "bg-surface-container-high border-8 border-black rounded-xl p-4 block-shadow flex items-center gap-4 relative overflow-hidden";
+      const ready = p.id !== judgeId && !started;
+      const badge = p.id === judgeId ? "DIRECTOR" : started ? "EN CAMPO" : "LISTO";
+      const badgeColor = p.id === judgeId
+        ? "bg-tertiary text-on-tertiary"
+        : started
+          ? "bg-secondary text-on-secondary"
+          : "bg-surface-variant text-on-surface border-dashed opacity-80";
       card.innerHTML = `
-        <div class="flex items-center gap-4 min-w-0">
-          <div class="w-12 h-12 bg-sunbeam-yellow rounded-full flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined text-carbon">${icon}</span>
-          </div>
-          <div class="min-w-0">
-            <p class="font-bold text-body text-carbon leading-none truncate">${escapeHtml(p.name)}</p>
-            <p class="text-caption text-slate-gray">${statusBadge(p)}</p>
-          </div>
+        <div class="absolute inset-0" style="background: ${color}; opacity: 0.08;"></div>
+        <div class="w-16 h-20 shrink-0 flex items-center justify-center">${crewmateSvg(color, 56)}</div>
+        <div class="flex-1 z-10 min-w-0">
+          <p class="font-bold text-body text-on-surface leading-none truncate">${escapeHtml(p.name)}</p>
+          <p class="text-caption text-on-surface-variant mt-1 uppercase">${statusBadge(p)}</p>
         </div>
-        <span class="font-bold text-caption text-electric-violet shrink-0">${p.id === judgeId ? "DIRECTOR" : started ? "EN CAMPO" : "LISTO"}</span>
+        <span class="z-10 ${badgeColor} px-3 py-1 border-4 border-black rounded text-caption uppercase shrink-0">${badge}</span>
       `;
       playersEl.appendChild(card);
     }
     for (let i = list.length; i < REQUIRED_PLAYERS; i++) {
+      const color = CREW_COLORS[i % CREW_COLORS.length];
       const empty = document.createElement("div");
       empty.className =
-        "bg-fog rounded-card p-4 flex items-center justify-center border border-dashed border-slate-gray h-[88px]";
+        "bg-surface-high border-8 border-black rounded-xl p-4 flex items-center justify-center border-dashed h-[88px] opacity-60";
       empty.innerHTML = `
-        <p class="text-caption text-slate-gray flex items-center gap-2">
+        <div class="w-16 h-20 shrink-0 flex items-center justify-center">${crewmateSvg(color, 48)}</div>
+        <p class="text-caption text-on-surface-variant uppercase flex items-center gap-2 ml-3">
           <span class="material-symbols-outlined">person_add</span>
           Esperando jugador...
         </p>
@@ -290,11 +304,11 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       const row = document.createElement("div");
       row.className = `flex gap-4 items-start ${self ? "justify-end" : ""} ${pending || failed ? "opacity-60" : ""}`;
       const who = document.createElement("span");
-      who.className = `font-bold shrink-0 ${self ? "text-carbon" : "text-electric-violet"}`;
+      who.className = `font-bold shrink-0 ${self ? "text-tertiary" : "text-secondary"}`;
       who.textContent = self ? "Tú:" : `${name}:`;
       const msg = document.createElement("p");
       msg.className = self
-        ? "text-body-sm text-carbon bg-surface-high rounded-card px-3 py-1"
+        ? "text-body-sm text-carbon bg-surface-high border-2 border-black rounded-lg px-3 py-1"
         : "text-body-sm text-carbon";
       if (failed) msg.classList.add("text-error");
       msg.textContent = text;
@@ -331,8 +345,10 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     if (!statusEl) return;
     if (started) {
       statusEl.textContent = "¡Partida en curso!";
+      statusEl.classList.remove("animate-pulse");
       return;
     }
+    statusEl.classList.add("animate-pulse");
     const count = activePlayers().length;
     if (count >= REQUIRED_PLAYERS && judgeId) {
       statusEl.textContent = "Juez elegido. Esperando que el host inicie...";
@@ -383,11 +399,11 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     const startArea = document.getElementById("start-area");
     if (comms && startArea) startArea.before(comms);
     lobbyLayoutEl?.classList.add("lg:flex", "lg:flex-row", "lg:items-stretch");
-    lobbyLayoutEl?.classList.remove("lg:grid-cols-12", "lg:gap-7");
+    lobbyLayoutEl?.classList.remove("lg:grid-cols-12", "lg:gap-6");
     leftCol?.classList.add("lg:flex-1", "lg:min-w-0");
-    leftCol?.classList.remove("lg:col-span-8", "lg:col-span-9");
+    leftCol?.classList.remove("lg:col-span-8");
     rightCol?.classList.add("lg:shrink-0", "lg:min-w-0", "lg:w-[var(--panel-w)]");
-    rightCol?.classList.remove("lg:col-span-4", "lg:col-span-3");
+    rightCol?.classList.remove("lg:col-span-4");
     rightCol?.style.setProperty("--panel-w", "360px");
     splitter?.classList.remove("hidden");
     stageEl?.classList.add("board-lg");

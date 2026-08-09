@@ -1,77 +1,248 @@
-import { createMenuClient } from "../portal/client";
-import { getUsername, setUsername } from "../shared/username";
-import { randomRoomId, randomRoomCode } from "../shared/id";
-import { crewmateSvg } from "../ui/crewmate";
+# Cable Rush — Sidebar funcional + pulido del tablero — Implementation Plan
 
-const CREW_COLORS = ["#ffb4a9", "#2196f3", "#4caf50", "#cdcd00", "#a4ffe8", "#c51111"];
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-export function bootMenu(): void {
-  const root = document.getElementById("app");
-  if (!root) return;
+**Goal:** Convertir los 4 items del sidebar del menú (Home, Join Room, Create Room, Leaderboard) en vistas navegables SPA, y pulir el tablero de corte: cursor tijera sobre cables, tablero más alto, y sonidos de corte (snip / zumbido).
 
-  const menu = createMenuClient();
+**Architecture:** Cambio 100% en el cliente. `menu.ts` pasa de pintar una vista única a `renderMenu` con `switchView(view)` que re-renderiza `#menu-body` por vista y marca el item activo. `board.ts` usa un cursor tijera (clase CSS con data-URI SVG) y dos helpers de sonido Web Audio. `src/ui/sound.ts` es nuevo. **Sin cambios** en `portal/`, `types.ts`, `agent/`, `worker/`.
 
-  const username = getUsername();
-  if (!username) {
-    renderUsername(root, (name) => {
-      setUsername(name);
-      renderMenu(root, menu);
-    });
-    return;
+**Tech Stack:** Astro, Tailwind v4, TypeScript estricto, SVG + DOM, Web Audio API.
+
+## Global Constraints
+
+- **NO git commits** — decisión del repo (AGENTS.md); los cambios quedan en working tree.
+- TypeScript estricto, **sin comentarios** en el código.
+- **Solo el cliente**: no tocar `src/portal/*`, `agent/*`, `worker/*`.
+- Cero assets: sonidos generados con Web Audio API; cursor tijera como data-URI SVG en CSS.
+- Se mantienen los flujos funcionales actuales (crear/join por código, filtros, room cards, copiar código, chat, corte optimista).
+- Verificación por tarea: `npx astro check` 0 errores.
+- Espec de referencia: `docs/superpowers/specs/2026-08-08-cable-rush-sidebar-pulido-design.md`.
+
+---
+
+### Task 1: Sonidos de corte — `src/ui/sound.ts` + integración en `board.ts`
+
+**Files:**
+- Create: `src/ui/sound.ts`
+- Modify: `src/board/board.ts`
+
+**Interfaces:**
+- Produces: `playCut(): void` y `playWrong(): void` en `src/ui/sound.ts`.
+- Consumes en `board.ts`: `playCut` en el `pointerdown` de cada cable; `playWrong` cuando el agente restaura un cable mal cortado.
+
+- [ ] **Step 1: Crear `src/ui/sound.ts`**
+
+```ts
+let ctx: AudioContext | null = null;
+
+function audio(): AudioContext | null {
+  if (typeof AudioContext === "undefined") return null;
+  if (!ctx) ctx = new AudioContext();
+  if (ctx.state === "suspended") void ctx.resume();
+  return ctx;
+}
+
+export function playCut(): void {
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime;
+  const noise = ac.createBufferSource();
+  const buffer = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.05), ac.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  noise.buffer = buffer;
+  const filter = ac.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = 2500;
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.2, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ac.destination);
+  noise.start(t);
+  noise.stop(t + 0.06);
+}
+
+export function playWrong(): void {
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime;
+  const osc = ac.createOscillator();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(120, t);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.15, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start(t);
+  osc.stop(t + 0.22);
+}
+```
+
+- [ ] **Step 2: Integrar en `src/board/board.ts`**
+
+Añadir al import (tras la línea 1):
+
+```ts
+import { playCut, playWrong } from "../ui/sound";
+```
+
+En el handler `hit.addEventListener("pointerdown", ...)` (líneas 143-150), añadir `playCut();` al inicio del callback, ANTES de `pendingCuts.add(...)`:
+
+```ts
+      hit.addEventListener("pointerdown", () => {
+        playCut();
+        pendingCuts.add(c.label);
+        applyCutLook(els);
+        window.setTimeout(() => {
+          if (pendingCuts.has(c.label)) pendingCuts.delete(c.label);
+        }, PENDING_CUT_MS);
+        void client.sendCut(c.label).catch(() => undefined);
+      });
+```
+
+En `renderCables` (líneas 94-115), detectar el corte malo. La rama de restauración es INALCANZABLE para este propósito: mientras el cable está en `pendingCuts`, `isCut` es `true` y entra a la rama de corte; cuando el timeout (1500 ms) lo saca de `pendingCuts`, `pendingCuts.has(c.label)` ya es `false`. Por eso el zumbido se dispara en la **rama de corte**: cuando un publish llega con `c.cut === false` mientras el cable sigue en `pendingCuts` (el agente NO confirmó → rechazo). Insertar dentro de `if (!c || isCut)`, tras la línea `if (c && c.cut) pendingCuts.delete(c.label);`:
+
+```ts
+        if (c && !c.cut && pendingCuts.has(c.label)) {
+          pendingCuts.delete(c.label);
+          playWrong();
+        }
+```
+
+Contexto exacto del bloque final (líneas 97-115):
+
+```ts
+    for (const [label, els] of cableEls) {
+      const c = byLabel.get(label);
+      const isCut = c ? c.cut || pendingCuts.has(c.label) : true;
+      if (!c || isCut) {
+        els.line.setAttribute("stroke-dasharray", "10 6");
+        els.hit.style.pointerEvents = "none";
+        els.g.setAttribute("style", "transition:opacity 600ms ease 250ms;opacity:0;");
+        if (!c) els.g.remove();
+        if (c && c.cut) pendingCuts.delete(c.label);
+        if (c && !c.cut && pendingCuts.has(c.label)) {
+          pendingCuts.delete(c.label);
+          playWrong();
+        }
+        continue;
+      }
+      els.hit.style.pointerEvents = "stroke";
+      els.line.removeAttribute("stroke-dasharray");
+      els.line.setAttribute("stroke", hex(c.color));
+```
+
+- [ ] **Step 3: Verificar**
+
+Run: `npx astro check`
+Expected: 0 errors.
+
+---
+
+### Task 2: Cursor tijera + altura del tablero — `theme.css`
+
+**Files:**
+- Modify: `src/styles/theme.css`
+
+**Interfaces:**
+- Produces: clase `.cursor-scissors` (cursor data-URI SVG) y las alturas nuevas de `#stage svg` / `#stage.board-lg svg`.
+- Consume en Task 3: `board.ts` aplica la clase `.cursor-scissors` a los `hit`.
+
+- [ ] **Step 1: Añadir `.cursor-scissors` al bloque `@layer components`**
+
+En `src/styles/theme.css`, dentro de `@layer components`, justo después del bloque `.analog-texture` (línea ~123), insertar:
+
+```css
+  .cursor-scissors {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.8))'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cline x1='20' y1='4' x2='8.12' y2='15.88'/%3E%3Cline x1='14.47' y1='14.48' x2='20' y2='20'/%3E%3Cline x1='8.12' y1='8.12' x2='12' y2='12'/%3E%3C/svg%3E") 18 6, auto;
   }
-  renderMenu(root, menu);
-}
+```
 
-function renderUsername(root: HTMLElement, onDone: (name: string) => void): void {
-  root.innerHTML = `
-    <div class="min-h-screen bg-surface text-on-surface analog-texture flex flex-col items-center justify-center px-6 relative overflow-hidden">
-      <div class="text-center mb-10">
-        <h1 class="text-hero font-display text-primary tracking-tighter uppercase stroke-heavy mb-1">cable rush</h1>
-        <p class="text-subheading text-secondary font-bold uppercase tracking-wide">Identidad para continuar</p>
-      </div>
-      <form id="user-form" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 w-full max-w-md relative text-center">
-        <div class="text-left mb-6">
-          <label class="sr-only" for="user-name">Callsign</label>
-          <div class="relative">
-            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">person</span>
-            <input
-              id="user-name"
-              maxlength="16"
-              autofocus
-              placeholder="Ingresa tu callsign"
-              class="block w-full pl-12 pr-4 py-4 bg-surface-high border-4 border-black rounded-lg text-body text-carbon placeholder:text-slate-gray focus:outline-none focus:border-secondary"
-            />
-          </div>
-        </div>
-        <button type="submit" class="pressed w-full bg-secondary text-on-secondary text-subheading py-4 rounded-full border-4 border-black block-shadow hover:bg-secondary-container transition-colors">
-          Conectar a la red
-        </button>
-      </form>
-    </div>
-  `;
-  const form = document.getElementById("user-form") as HTMLFormElement;
-  const input = document.getElementById("user-name") as HTMLInputElement;
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const name = input.value.trim();
-    if (name) onDone(name);
-  });
-}
+- [ ] **Step 2: Subir la altura del tablero**
 
+En el mismo archivo, el bloque `#stage` (líneas ~125-135):
+
+```css
+  #stage {
+    position: relative;
+  }
+  #stage svg {
+    display: block;
+    width: 100%;
+    height: 420px;
+  }
+  #stage.board-lg svg {
+    height: 560px;
+  }
+```
+
+Cambiar `height: 420px;` → `height: 520px;` y `height: 560px;` → `height: 640px;`.
+
+- [ ] **Step 3: Verificar**
+
+Run: `npx astro check`
+Expected: 0 errors.
+
+---
+
+### Task 3: Aplicar el cursor tijera a los cables — `board.ts`
+
+**Files:**
+- Modify: `src/board/board.ts`
+
+**Interfaces:**
+- Consumes: `.cursor-scissors` de Task 2.
+- Produces: los `hit` de los cables usan el cursor tijera.
+
+- [ ] **Step 1: Aplicar la clase al `hit`**
+
+En `renderCables`, el `hit` se crea con `style: "cursor:pointer;"` (línea 135). Reemplazar ese atributo `style` por `style: "cursor:pointer;"` → quitarlo y añadir la clase:
+
+```ts
+      const hit = svgEl(NS, "line", {
+        x1: String(TERMINAL_X_R), y1: "0",
+        x2: String(VIEW_W - TERMINAL_X_R), y2: "0",
+        stroke: "transparent", "stroke-width": "26", "stroke-linecap": "round",
+      });
+      hit.classList.add("cursor-scissors");
+      hit.style.pointerEvents = "stroke";
+```
+
+La línea `hit.style.pointerEvents = "stroke";` ya existe justo después (línea 137); mantenerla. El `cursor:pointer` inline desaparece (la clase CSS lo reemplaza).
+
+- [ ] **Step 2: Verificar**
+
+Run: `npx astro check`
+Expected: 0 errors. (El cursor se ve al pasar sobre un cable en el dev server.)
+
+---
+
+### Task 4: Sidebar SPA — vistas Home / Join / Create / Leaderboard — `menu.ts`
+
+**Files:**
+- Modify: `src/menu/menu.ts`
+
+**Interfaces:**
+- Consumes: `createMenuClient` (con `getRooms`, `subscribeRooms`, `subscribeStatus`), `getUsername`, `randomRoomId`, `randomRoomCode`, `crewmateSvg`.
+- Produces: `bootMenu()` con `renderMenu(root, menu)` y `switchView(view)` para `"home" | "join" | "create" | "leaderboard"`; el sidebar marca el item activo; el FAB navega a create.
+
+- [ ] **Step 1: Refactor de `shell` para items con `data-view` y `id`**
+
+Reemplazar la función `shell` completa (líneas 61-100) por:
+
+```ts
 function shell(active: string, username: string): string {
   const item = (label: string, icon: string, view: string): string => `
     <button data-view="${view}" class="flex items-center gap-3 p-3 text-left w-full ${active === view ? "bg-secondary text-on-secondary font-bold rounded-full border-4 border-black block-shadow" : "text-on-surface hover:bg-surface-variant rounded-full border-4 border-transparent hover:border-black hover:block-shadow"} transition-transform active:scale-95">
       <span class="material-symbols-outlined text-xl" ${active === view ? 'style="font-variation-settings: \'FILL\' 1;"' : ""}>${icon}</span>
       <span class="text-caption uppercase tracking-wide">${label}</span>
     </button>`;
-  const mobileItem = (label: string, icon: string, view: string): string => `
-    <button data-view="${view}" class="flex flex-col items-center gap-0.5 px-2 py-1.5 flex-1 ${active === view ? "text-secondary" : "text-on-surface-variant"}">
-      <span class="material-symbols-outlined text-2xl" ${active === view ? 'style="font-variation-settings: \'FILL\' 1;"' : ""}>${icon}</span>
-      <span class="text-[10px] uppercase tracking-wide">${label}</span>
-    </button>`;
   return `
     <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface analog-texture">
-      <nav id="side-nav" class="hidden lg:flex flex-col gap-4 p-6 w-64 shrink-0 bg-surface-container border-r-8 border-black block-shadow-md">
+      <nav class="hidden lg:flex flex-col gap-4 p-6 w-64 shrink-0 bg-surface-container border-r-8 border-black block-shadow-md">
         <div class="mb-6">
           <h1 class="text-heading-sm font-display text-primary tracking-tighter uppercase stroke-heavy mb-6">cable rush</h1>
           <div class="flex items-center gap-3 p-3 bg-surface-high border-4 border-black rounded-xl block-shadow">
@@ -93,27 +264,23 @@ function shell(active: string, username: string): string {
           <span class="text-secondary flex items-center gap-1"><div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div> ONLINE</span>
         </div>
       </nav>
-      <nav id="mobile-nav" class="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface-container border-t-8 border-black block-shadow flex items-stretch justify-around px-2 py-1.5">
-        ${mobileItem("Home", "home", "home")}
-        ${mobileItem("Join", "meeting_room", "join")}
-        ${mobileItem("Create", "add_box", "create")}
-        ${mobileItem("Rank", "leaderboard", "leaderboard")}
-      </nav>
-      <main class="flex-1 h-full overflow-y-auto px-6 lg:px-12 py-8 bg-surface relative pb-32 lg:pb-28">
+      <main class="flex-1 h-full overflow-y-auto px-6 lg:px-12 py-8 bg-surface relative pb-28">
         <div id="menu-body"></div>
       </main>
-      <button id="fab-create" type="button" class="pressed fixed bottom-6 right-6 z-50 bg-primary text-on-primary text-body-lg uppercase px-6 py-4 rounded-full border-4 border-black block-shadow-md hidden lg:flex items-center gap-3">
+      <button id="fab-create" type="button" class="pressed fixed bottom-6 right-6 z-50 bg-primary text-on-primary text-body-lg uppercase px-6 py-4 rounded-full border-4 border-black block-shadow-md flex items-center gap-3">
         <span class="material-symbols-outlined text-2xl font-bold">add_box</span>
         <span class="hidden sm:inline tracking-wide">Create New Operation</span>
       </button>
     </div>
   `;
 }
+```
 
-function isFabHidden(view: "home" | "join" | "create" | "leaderboard"): boolean {
-  return view === "join" || view === "create";
-}
+- [ ] **Step 2: Reemplazar `renderRooms` por `renderMenu` + `switchView`**
 
+Reemplazar `function renderRooms(...)` (líneas 102-207) por:
+
+```ts
 function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>): void {
   const username = getUsername() ?? "OPERATOR";
   let current: "home" | "join" | "create" | "leaderboard" = "home";
@@ -132,7 +299,7 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
   let cleanup: (() => void) | undefined;
 
   function markActive(view: "home" | "join" | "create" | "leaderboard"): void {
-    document.querySelectorAll<HTMLButtonElement>("#side-nav button[data-view]").forEach((btn) => {
+    document.querySelectorAll<HTMLButtonElement>("nav button[data-view]").forEach((btn) => {
       const isActive = btn.dataset.view === view;
       btn.classList.toggle("bg-secondary", isActive);
       btn.classList.toggle("text-on-secondary", isActive);
@@ -147,13 +314,6 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
       const icon = btn.querySelector(".material-symbols-outlined");
       if (icon) icon.setAttribute("style", isActive ? "font-variation-settings: 'FILL' 1;" : "");
     });
-    document.querySelectorAll<HTMLButtonElement>("#mobile-nav button[data-view]").forEach((btn) => {
-      const isActive = btn.dataset.view === view;
-      btn.classList.toggle("text-secondary", isActive);
-      btn.classList.toggle("text-on-surface-variant", !isActive);
-      const icon = btn.querySelector(".material-symbols-outlined");
-      if (icon) icon.setAttribute("style", isActive ? "font-variation-settings: 'FILL' 1;" : "");
-    });
   }
 
   function switchView(view: "home" | "join" | "create" | "leaderboard"): void {
@@ -163,19 +323,29 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
     markActive(view);
     body.replaceChildren();
     cleanup = views[view]();
-    if (fab) fab.classList.toggle("hidden", isFabHidden(view));
+    if (fab) fab.classList.toggle("hidden", view === "join" || view === "create");
   }
 
-  document.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>("nav button[data-view]").forEach((btn) => {
     btn.addEventListener("click", () => switchView(btn.dataset.view as "home" | "join" | "create" | "leaderboard"));
   });
   fab?.addEventListener("click", () => switchView("create"));
 
   markActive(current);
   cleanup = views[current]();
-  if (fab) fab.classList.toggle("hidden", isFabHidden(current));
+  if (fab) fab.classList.toggle("hidden", current === "join" || current === "create");
 }
+```
 
+**Nota de diseño:** el `shell` se renderiza UNA vez; `switchView` re-renderiza solo `#menu-body`, re-marca el item activo (`markActive`) y ejecuta el `cleanup` de la vista anterior (para que `renderHome`/`renderLeaderboard` no acumulen suscripciones ni cierren sobre nodos viejos). El FAB se oculta en join/create.
+
+Cada función de vista devuelve `() => void` (cleanup; `undefined` si no suscribe): `renderHome`/`renderLeaderboard` devuelven una función que cancela sus suscripciones; `renderJoin`/`renderCreate` devuelven `undefined` (ver Step 3).
+
+- [ ] **Step 3: Añadir `renderHome`, `renderJoin`, `renderCreate`, `renderLeaderboard`**
+
+Insertar antes de `function roomCard` (línea 209):
+
+```ts
 function renderHome(body: HTMLElement, menu: ReturnType<typeof createMenuClient>): () => void {
   body.innerHTML = `
     <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-8 border-b-8 border-black pb-4">
@@ -346,55 +516,58 @@ function renderLeaderboard(body: HTMLElement, menu: ReturnType<typeof createMenu
     unsubRooms();
   };
 }
+```
 
-function roomCard(name: string, players: number, hostName: string, id: string, playing: boolean): HTMLElement {
-  const card = document.createElement("div");
-  card.className =
-    "bg-surface-container border-8 border-black p-4 rounded-xl block-shadow-md flex flex-col group relative overflow-hidden transition-transform hover:-translate-y-1";
-  const locked = playing || players >= 4;
-  const label = playing ? "En curso" : players >= 4 ? "Llena" : "Unirse";
-  const code = id.slice(id.indexOf("-") + 1);
-  card.innerHTML = `
-    <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-    <div class="h-32 bg-surface-high border-4 border-black rounded-lg mb-4 p-2 relative overflow-hidden flex items-center justify-center">
-      <div class="absolute inset-0 opacity-20" style="background-image: radial-gradient(circle at 2px 2px, #a4ffe8 1px, transparent 0); background-size: 16px 16px;"></div>
-      <span class="material-symbols-outlined text-6xl text-secondary z-10" style="font-variation-settings: 'wght' 200;">cable</span>
-      <div class="absolute top-2 left-2 bg-black px-2 py-1 text-[10px] text-secondary uppercase border-2 border-secondary">Sec: ${escapeHtml(code)}</div>
-    </div>
-    <div class="flex justify-between items-start mb-2">
-      <h3 class="text-heading-sm font-display text-on-surface uppercase truncate pr-2">${escapeHtml(name)}</h3>
-      <div class="bg-surface-highest border-2 border-black px-2 py-1 flex items-center gap-1 rounded">
-        <span class="material-symbols-outlined text-sm text-secondary">group</span>
-        <span class="text-caption text-on-surface">${players}/4</span>
-      </div>
-    </div>
-    <p class="text-body-sm text-on-surface-variant mb-6 uppercase">Host: ${escapeHtml(hostName)}</p>
-    <div class="mt-auto pt-4 border-t-4 border-black border-dashed flex justify-between items-center">
-      <div class="flex gap-1">
-        ${cableStrip(players)}
-      </div>
-      <button class="join-btn px-6 py-2 ${locked ? "bg-surface-container text-on-surface-variant border-4 border-black cursor-not-allowed" : "bg-secondary text-on-secondary border-4 border-black block-shadow pressed"} text-caption uppercase rounded-full">${label}</button>
-    </div>
-  `;
-  card.querySelector<HTMLButtonElement>(".join-btn")!.addEventListener("click", () => {
-    if (locked) return;
-    window.location.href = `/room?id=${encodeURIComponent(id)}`;
-  });
-  return card;
-}
+- [ ] **Step 4: Actualizar `bootMenu`**
 
-function cableStrip(players: number): string {
-  const colors = ["#ffb4a9", "#2196f3", "#4caf50", "#cdcd00"];
-  let out = "";
-  for (let i = 0; i < 4; i++) {
-    const on = i < players;
-    out += `<span class="w-2 h-8 ${on ? "bg-error" : "bg-surface-highest"} border-2 border-black inline-block"></span>`;
+El `renderMenu` ya gestiona la visibilidad inicial del FAB dentro de sí mismo. Solo hay que cambiar `bootMenu` (líneas 13-19) para que el callback de identidad y el render final usen `renderMenu`:
+
+```ts
+  const username = getUsername();
+  if (!username) {
+    renderUsername(root, (name) => {
+      setUsername(name);
+      renderMenu(root, menu);
+    });
+    return;
   }
-  return out;
-}
+  renderMenu(root, menu);
+```
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
+- [ ] **Step 5: Verificar**
+
+Run: `npx astro check`
+Expected: 0 errors. Revisar que no queden referencias a `renderRooms` (debe eliminarse la función vieja por completo). Si `astro check` reporta `renderRooms` o `renderUsername` sin uso, confirmar que el flujo de `bootMenu` las llama.
+
+---
+
+### Task 5: Integración y verificación del loop completo
+
+**Files:**
+- Ninguno (verificación).
+
+- [ ] **Step 1: Typecheck global**
+
+Run: `npx astro check`
+Expected: 0 errors.
+
+- [ ] **Step 2: Build de producción**
+
+Run: `npx astro build`
+Expected: build OK.
+
+- [ ] **Step 3: Smoke test en dev**
+
+Run en dos terminales:
+- `npm run agent:room`
+- `astro dev`
+
+Expected (test manual):
+- Menú: los 4 items del sidebar navegan sin recargar; el item activo se marca; FAB visible en Home/Leaderboard y oculto en Join/Create; FAB lleva a Create.
+- Home: lista + filtros; Join: unirse por código; Create: crear (pública/privada → room); Leaderboard: rooms ordenadas (en curso primero, luego por jugadores).
+- Partida: cursor tijera sobre los cables, tablero más alto, snip al cortar y zumbido al cortar mal (una vez que el agente restaura).
+
+- [ ] **Step 4: Confirmar working tree**
+
+Run: `git status --short`
+Expected: `src/menu/menu.ts`, `src/board/board.ts`, `src/styles/theme.css` modificados, `src/ui/sound.ts` nuevo; sin commits.
