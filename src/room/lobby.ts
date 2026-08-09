@@ -21,7 +21,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
         <div class="flex items-center justify-between w-full px-10 py-2 max-w-[1200px] mx-auto h-16">
           <div class="flex items-center gap-4 min-w-0">
             <span class="text-heading-sm font-extrabold text-sunbeam-yellow lowercase shrink-0">cable rush</span>
-            <span id="room-id" class="text-body-sm text-paper-white truncate">Operación: ${escapeHtml(roomName)}</span>
+            <span id="room-id" class="text-body-sm text-paper-white truncate hidden md:inline">Operación: ${escapeHtml(roomName)}</span>
             <span class="flex items-center gap-1 bg-paper-white/10 rounded-full px-3 py-1 shrink-0">
               <span class="material-symbols-outlined text-[16px] text-sunbeam-yellow">key</span>
               <span id="room-code" class="text-body-sm font-bold text-sunbeam-yellow tracking-widest">--</span>
@@ -30,15 +30,38 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
               </button>
             </span>
           </div>
-          <a id="leave-btn" href="/" class="text-body-sm text-paper-white hover:text-sunbeam-yellow transition-colors flex items-center gap-2 shrink-0">
-            <span class="material-symbols-outlined text-[18px]">logout</span> Salir
-          </a>
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="relative">
+              <div class="flex items-center gap-2 bg-paper-white/10 rounded-full px-3 py-1">
+                <span class="material-symbols-outlined text-[16px] text-sunbeam-yellow">person</span>
+                <span id="user-name" class="text-body-sm text-paper-white hidden sm:inline">${escapeHtml(username)}</span>
+                <button id="mic-btn" type="button" title="Micro" class="text-paper-white hover:text-sunbeam-yellow transition-colors">
+                  <span id="mic-icon" class="material-symbols-outlined text-[20px]">mic</span>
+                </button>
+                <button id="deafen-btn" type="button" title="Ensordecer" class="text-paper-white hover:text-sunbeam-yellow transition-colors">
+                  <span id="deafen-icon" class="material-symbols-outlined text-[20px]">headphones</span>
+                </button>
+              </div>
+              <div id="mic-menu" class="hidden absolute right-0 top-full mt-2 w-60 bg-paper-white rounded-card shadow-pill p-4 z-20">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-heading-sm text-carbon font-bold">Micro</span>
+                  <span class="text-caption text-slate-gray">Voz en fase 5</span>
+                </div>
+                <button id="mic-toggle" type="button" class="w-full flex items-center justify-between bg-fog rounded-card px-4 py-2 text-body-sm text-carbon hover:bg-surface-container transition-colors">
+                  <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">mic</span> Sonido</span>
+                  <span id="mic-state" class="font-bold text-electric-violet">ACTIVO</span>
+                </button>
+              </div>
+            </div>
+            <a id="leave-btn" href="/" class="text-body-sm text-paper-white hover:text-sunbeam-yellow transition-colors flex items-center gap-2 shrink-0">
+              <span class="material-symbols-outlined text-[18px]">logout</span> Salir
+            </a>
+          </div>
         </div>
       </header>
       <main class="flex-1 w-full max-w-[1200px] mx-auto px-10 py-7">
         <div id="lobby-layout" class="grid grid-cols-1 lg:grid-cols-12 gap-7">
-          <section class="lg:col-span-8 flex flex-col gap-6">
-            <div id="lobby-state" class="bg-surface-container rounded-card px-6 py-2 text-subheading text-carbon font-bold">
+          <section id="left-col" class="lg:col-span-8 flex flex-col gap-6">            <div id="lobby-state" class="bg-surface-container rounded-card px-6 py-2 text-subheading text-carbon font-bold">
               Esperando jugadores...
             </div>
             <div id="hud" class="hidden bg-paper-white rounded-card shadow-pill p-6 flex items-center justify-between gap-5">
@@ -50,7 +73,8 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
             <div id="comms" class="bg-sand rounded-[16px] rounded-bl-none p-6 relative">
               <h3 class="text-heading-sm text-carbon font-bold mb-2">Comms tácticas</h3>
               <p id="chat-error" class="hidden text-body-sm text-error font-bold mb-2"></p>
-              <div id="chat-log" class="space-y-3 max-h-56 overflow-y-auto"></div>
+              <div id="chat-log" class="space-y-3 max-h-72 overflow-y-auto"></div>
+              <p id="chat-empty" class="text-caption text-slate-gray mt-1">Sin mensajes aún. Coordiná el corte por voz.</p>
               <form id="chat-form" class="mt-6 relative">
                 <input
                   id="chat-input"
@@ -65,7 +89,8 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
               </form>
             </div>
           </section>
-          <aside class="lg:col-span-4 flex flex-col gap-7">
+          <div id="splitter" class="hidden lg:block w-1.5 shrink-0 cursor-col-resize bg-outline-variant rounded-full hover:bg-electric-violet transition-colors self-stretch"></div>
+          <aside id="right-col" class="lg:col-span-4 flex flex-col gap-7">
             <div class="flex justify-between items-end">
               <h2 class="text-heading text-carbon font-bold">Squad</h2>
               <span id="squad-count" class="text-subheading text-electric-violet">0 / 4</span>
@@ -97,6 +122,16 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
             </a>
           </div>
         </div>
+        <div id="locked-out" class="hidden fixed inset-0 z-50 bg-surface/90 backdrop-blur flex items-center justify-center px-10">
+          <div class="bg-paper-white rounded-card shadow-pill p-10 max-w-md w-full text-center">
+            <span class="material-symbols-outlined text-[56px] text-sunbeam-yellow">lock</span>
+            <h2 class="text-display text-carbon">Partida en curso</h2>
+            <p class="text-body-sm text-on-surface-variant mt-2">La sala ya comenzó y no acepta más jugadores.</p>
+            <a href="/" class="block mt-7 w-full bg-electric-violet text-paper-white text-body font-bold py-3 rounded-full shadow-pill hover:bg-secondary-container transition-colors">
+              Volver al menú
+            </a>
+          </div>
+        </div>
       </main>
     </div>
   `;
@@ -111,13 +146,27 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   const startHintEl = document.getElementById("start-hint");
   const chatLogEl = document.getElementById("chat-log");
+  const chatEmptyEl = document.getElementById("chat-empty");
   const chatErrorEl = document.getElementById("chat-error");
   const chatForm = document.getElementById("chat-form");
   const chatInput = document.getElementById("chat-input") as HTMLInputElement | null;
   const gameoverEl = document.getElementById("gameover");
   const goLevelEl = document.getElementById("go-level");
+  const lockedOutEl = document.getElementById("locked-out");
+  const leftCol = document.getElementById("left-col");
+  const rightCol = document.getElementById("right-col");
+  const stageEl = document.getElementById("stage");
+  const lobbyLayoutEl = document.getElementById("lobby-layout");
+  const splitter = document.getElementById("splitter");
   const roomCodeEl = document.getElementById("room-code");
   const copyBtn = document.getElementById("copy-code");
+  const micBtn = document.getElementById("mic-btn");
+  const micMenuEl = document.getElementById("mic-menu");
+  const micIconEl = document.getElementById("mic-icon");
+  const micToggle = document.getElementById("mic-toggle");
+  const micStateEl = document.getElementById("mic-state");
+  const deafenBtn = document.getElementById("deafen-btn");
+  const deafenIconEl = document.getElementById("deafen-icon");
 
   const code = roomId.slice(roomId.indexOf("-") + 1);
   if (roomCodeEl) roomCodeEl.textContent = code;
@@ -125,6 +174,43 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
   if (copyBtn) {
     copyBtn.addEventListener("click", () => {
       void copyRoomCode(copyBtn, code);
+    });
+  }
+
+  let micMuted = false;
+  let deafened = false;
+
+  function refreshAudio(): void {
+    if (!micIconEl || !micStateEl || !deafenIconEl) return;
+    const muted = micMuted || deafened;
+    micIconEl.textContent = muted ? "mic_off" : "mic";
+    micIconEl.classList.toggle("text-error", muted);
+    micStateEl.textContent = muted ? "MUTE" : "ACTIVO";
+    micStateEl.classList.toggle("text-error", muted);
+    micStateEl.classList.toggle("text-electric-violet", !muted);
+    deafenIconEl.textContent = deafened ? "hearing_disabled" : "headphones";
+    deafenIconEl.classList.toggle("text-error", deafened);
+  }
+
+  if (micBtn && micMenuEl) {
+    micBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      micMenuEl.classList.toggle("hidden");
+    });
+    document.addEventListener("click", () => micMenuEl.classList.add("hidden"));
+  }
+  if (micToggle) {
+    micToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      micMuted = !micMuted;
+      refreshAudio();
+    });
+  }
+  if (deafenBtn) {
+    deafenBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deafened = !deafened;
+      refreshAudio();
     });
   }
 
@@ -196,6 +282,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
 
   function renderChat(entries: ChatEntry[]): void {
     if (!chatLogEl) return;
+    if (chatEmptyEl) chatEmptyEl.classList.toggle("hidden", entries.length > 0);
     chatLogEl.replaceChildren();
     for (const { name, text, self, status } of entries) {
       const pending = status === "pending";
@@ -292,6 +379,39 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     started = true;
     mountByRole(selfRole ?? "cutter");
     updateLobbyBanner();
+    const comms = document.getElementById("comms");
+    const startArea = document.getElementById("start-area");
+    if (comms && startArea) startArea.before(comms);
+    lobbyLayoutEl?.classList.add("lg:flex", "lg:flex-row", "lg:items-stretch");
+    lobbyLayoutEl?.classList.remove("lg:grid-cols-12", "lg:gap-7");
+    leftCol?.classList.add("lg:flex-1", "lg:min-w-0");
+    leftCol?.classList.remove("lg:col-span-8", "lg:col-span-9");
+    rightCol?.classList.add("lg:shrink-0", "lg:min-w-0", "lg:w-[var(--panel-w)]");
+    rightCol?.classList.remove("lg:col-span-4", "lg:col-span-3");
+    rightCol?.style.setProperty("--panel-w", "360px");
+    splitter?.classList.remove("hidden");
+    stageEl?.classList.add("board-lg");
+  }
+
+  let dragging = false;
+  if (splitter && rightCol && lobbyLayoutEl) {
+    splitter.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      dragging = true;
+      splitter.setPointerCapture(e.pointerId);
+    });
+    splitter.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const rect = lobbyLayoutEl.getBoundingClientRect();
+      const width = rect.right - e.clientX;
+      rightCol.style.setProperty("--panel-w", `${Math.min(480, Math.max(260, width))}px`);
+    });
+    splitter.addEventListener("pointerup", () => {
+      dragging = false;
+    });
+    splitter.addEventListener("pointercancel", () => {
+      dragging = false;
+    });
   }
 
   function maybeAnnounceJudge(): void {
@@ -326,6 +446,7 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
       players: list.length,
       hostId: client.getSelfId(),
       hostName: username,
+      playing: started,
       updatedAt: Date.now(),
     });
   }
@@ -361,8 +482,18 @@ export function bootRoom(roomId: string, isHost: boolean, roomName: string): voi
     });
   }
 
+  let lockedOut = false;
+
   client.subscribeState((s) => {
     if (!s) return;
+    if (!started && (s.status === "playing" || s.status === "finished")) {
+      if (!lockedOut) {
+        lockedOut = true;
+        if (lockedOutEl) lockedOutEl.classList.remove("hidden");
+        client.release();
+      }
+      return;
+    }
     if (hudEl) hudEl.classList.remove("hidden");
     if (timerEl) {
       const secs = Math.max(0, Math.round(s.timerMs / 1000));

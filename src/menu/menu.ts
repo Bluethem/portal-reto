@@ -145,19 +145,32 @@ function renderRooms(root: HTMLElement, menu: ReturnType<typeof createMenuClient
     if (!body) return;
     body.replaceChildren();
     const pubs = rooms.filter((r) => r.mode === "public");
+    if (pubs.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "col-span-full text-center text-body-sm text-slate-gray py-10";
+      empty.innerHTML = `
+        <span class="material-symbols-outlined text-[48px] text-ash block mx-auto mb-2">group_off</span>
+        No hay operaciones activas. Creá una para empezar.
+      `;
+      body.appendChild(empty);
+      return;
+    }
     for (const r of pubs) {
-      body.appendChild(roomCard(r.name, r.players, r.hostName, r.id));
+      body.appendChild(roomCard(r.name, r.players, r.hostName, r.id, r.playing ?? false));
     }
   });
 }
 
-function roomCard(name: string, players: number, hostName: string, id: string): HTMLElement {
+function roomCard(name: string, players: number, hostName: string, id: string, playing: boolean): HTMLElement {
   const card = document.createElement("div");
   card.className =
     "bg-paper-white rounded-card overflow-hidden flex flex-col group hover:-translate-y-1 transition-transform duration-200 shadow-pill m-5";
+  const locked = playing || players >= 4;
+  const label = playing ? "En curso" : players >= 4 ? "Llena" : "Unirse";
   card.innerHTML = `
     <div class="bg-sunbeam-yellow aspect-video w-full relative flex items-center justify-center">
       <span class="material-symbols-outlined text-[56px] text-carbon">cable</span>
+      ${playing ? '<span class="absolute top-2 right-2 bg-carbon text-paper-white text-caption font-bold px-2 py-0.5 rounded-full">EN CURSO</span>' : ""}
     </div>
     <div class="p-6 flex flex-col flex-1">
       <h3 class="text-heading text-carbon mb-1">${escapeHtml(name)}</h3>
@@ -166,11 +179,12 @@ function roomCard(name: string, players: number, hostName: string, id: string): 
         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[20px]">bolt</span> ${escapeHtml(hostName)}</span>
       </div>
       <div class="mt-auto">
-        <button class="join-btn w-full bg-electric-violet text-paper-white text-body-sm font-bold py-1 rounded-full shadow-pill hover:bg-secondary-container transition-all group-hover:scale-[1.02]">Unirse</button>
+        <button class="join-btn w-full bg-electric-violet text-paper-white text-body-sm font-bold py-1 rounded-full shadow-pill hover:bg-secondary-container transition-all group-hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:group-hover:scale-100" ${locked ? "disabled" : ""}>${label}</button>
       </div>
     </div>
   `;
   card.querySelector<HTMLButtonElement>(".join-btn")!.addEventListener("click", () => {
+    if (locked) return;
     window.location.href = `/room?id=${encodeURIComponent(id)}`;
   });
   return card;

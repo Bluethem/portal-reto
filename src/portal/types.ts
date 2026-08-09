@@ -13,6 +13,7 @@ export interface RoomInfo {
   players: number;
   hostId: string;
   hostName: string;
+  playing?: boolean;
   updatedAt: number;
 }
 
