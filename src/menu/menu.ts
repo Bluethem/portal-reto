@@ -11,6 +11,7 @@ import { shipSvg } from "../ui/ship";
 import { spaceBackdrop } from "../ui/space";
 import { crewmateSvg } from "../ui/crewmate";
 import { CREW_COLORS, crewColorName } from "../ui/crew-colors";
+import { roomThumb } from "../ui/planet";
 import { getProfileColor, setProfileColor } from "../shared/profile";
 
 type MenuView = "rooms" | "reglas";
@@ -379,10 +380,8 @@ function roomCard(name: string, players: number, hostName: string, id: string, p
   const label = privateRoom ? "Privada" : players >= 4 ? "Llena" : playing ? "Entrar" : "Unirse";
   const code = id.slice(id.indexOf("-") + 1);
   card.innerHTML = `
-    <div class="h-28 rounded-lg mb-4 relative overflow-hidden border-4 border-black bg-black/40 flex items-center justify-center">
-      <div class="space-stars absolute inset-0 opacity-40"></div>
-      <div class="space-planet space-planet-sm absolute -bottom-14 -left-10 opacity-30"></div>
-      <span class="material-symbols-outlined text-5xl text-secondary z-10" style="font-variation-settings: 'wght' 200;">cable</span>
+    <div class="h-28 rounded-lg mb-4 relative overflow-hidden border-4 border-black bg-black/40">
+      ${roomThumb(id, playing)}
       ${playing ? '<div class="absolute top-2 right-2 z-10 bg-secondary text-on-secondary px-2 py-0.5 text-[10px] uppercase border-2 border-black font-bold">EN CURSO</div>' : ""}
       ${privateRoom
         ? `<div class="absolute top-2 left-2 z-10 bg-black px-2 py-0.5 text-[10px] text-tertiary uppercase border-2 border-tertiary flex items-center gap-1">PRIV <span class="material-symbols-outlined text-[11px]">lock</span></div>`
