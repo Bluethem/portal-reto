@@ -3,11 +3,15 @@ import { getUsername, setUsername } from "../shared/username";
 import { randomRoomId, randomRoomCode } from "../shared/id";
 import { startLobbyMusic, mountMusicToggle, MUSIC_TOGGLE_HTML } from "../ui/music";
 import { playClick } from "../ui/sound";
-import { renderMobileNav, renderSidebar } from "../ui/shell";
+import { renderMobileNav, renderSidebar, mountSidebarProfile, updateSidebarProfile } from "../ui/shell";
 import type { ShellItem } from "../ui/shell";
 import { reglasHtml } from "../ui/reglas";
 import { playIntro } from "../ui/intro";
 import { shipSvg } from "../ui/ship";
+import { spaceBackdrop } from "../ui/space";
+import { crewmateSvg } from "../ui/crewmate";
+import { CREW_COLORS, crewColorName } from "../ui/crew-colors";
+import { getProfileColor, setProfileColor } from "../shared/profile";
 
 type MenuView = "rooms" | "reglas";
 
@@ -35,13 +39,15 @@ export function bootMenu(): void {
 }
 
 function renderUsername(root: HTMLElement, onDone: (name: string) => void): void {
+  let selectedColor = getProfileColor();
   root.innerHTML = `
     <div class="min-h-screen bg-surface text-on-surface flex flex-col items-center justify-center px-6 relative overflow-hidden">
-      <div class="text-center mb-10">
-        <h1 class="text-hero font-display text-primary tracking-tighter uppercase stroke-heavy mb-1">cable rush</h1>
+      ${spaceBackdrop()}
+      <div class="relative z-10 text-center mb-10">
+        <h1 class="text-hero font-display text-primary tracking-tighter uppercase stroke-heavy mb-1">wirebreak</h1>
         <p class="text-subheading text-secondary font-bold uppercase tracking-wide">Identidad para continuar</p>
       </div>
-      <form id="user-form" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 w-full max-w-md relative text-center">
+      <form id="user-form" class="relative z-10 bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 w-full max-w-md text-center">
         <div class="text-left mb-6">
           <label class="sr-only" for="user-name">Callsign</label>
           <div class="relative">
@@ -55,6 +61,15 @@ function renderUsername(root: HTMLElement, onDone: (name: string) => void): void
             />
           </div>
         </div>
+        <div class="text-left mb-6">
+          <label class="text-caption text-on-surface-variant uppercase mb-2 block">Color de crewmate</label>
+          <div id="identity-colors" class="flex flex-wrap gap-3">
+            ${CREW_COLORS.map((c) => {
+              const active = c === selectedColor;
+              return `<button type="button" data-color="${c}" class="ident-swatch w-10 h-10 rounded-full border-4 border-black transition-transform hover:scale-110 ${active ? "ring-4 ring-secondary" : ""}" style="background:${c}" title="${crewColorName(c)}"></button>`;
+            }).join("")}
+          </div>
+        </div>
         <button type="submit" class="pressed w-full bg-secondary text-on-secondary text-subheading py-4 rounded-full border-4 border-black block-shadow hover:bg-secondary-container transition-colors">
           Conectar a la red
         </button>
@@ -63,19 +78,32 @@ function renderUsername(root: HTMLElement, onDone: (name: string) => void): void
   `;
   const form = document.getElementById("user-form") as HTMLFormElement;
   const input = document.getElementById("user-name") as HTMLInputElement;
+  document.querySelectorAll<HTMLButtonElement>("#identity-colors .ident-swatch").forEach((b) => {
+    b.addEventListener("click", () => {
+      playClick();
+      selectedColor = b.dataset.color ?? selectedColor;
+      document.querySelectorAll<HTMLButtonElement>("#identity-colors .ident-swatch").forEach((x) => {
+        x.classList.toggle("ring-4", x.dataset.color === selectedColor);
+        x.classList.toggle("ring-secondary", x.dataset.color === selectedColor);
+      });
+    });
+  });
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const name = input.value.trim();
-    if (name) onDone(name);
+    if (!name) return;
+    setProfileColor(selectedColor);
+    onDone(name);
   });
 }
 
 function shell(active: MenuView, username: string): string {
   return `
-    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface">
+    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface relative overflow-hidden">
+      ${spaceBackdrop()}
       ${renderSidebar(username, ROOM_ITEMS, active, { footerSlot: MUSIC_TOGGLE_HTML })}
-      <main class="flex-1 h-full overflow-y-auto px-6 lg:px-12 py-8 bg-surface relative pb-32 lg:pb-28">
-        <div id="menu-body"></div>
+      <main class="relative z-10 flex-1 h-full overflow-y-auto px-6 lg:px-12 py-8 pb-32 lg:pb-28">
+        <div id="menu-body" class="relative z-10"></div>
       </main>
       ${renderMobileNav(ROOM_ITEMS, active)}
     </div>
@@ -97,6 +125,9 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
   window.addEventListener("pointerdown", startMusicOnce);
   window.addEventListener("keydown", startMusicOnce);
   mountMusicToggle();
+  mountSidebarProfile(() => {
+    updateSidebarProfile(getUsername() ?? "", getProfileColor());
+  });
 
   const views: Record<MenuView, () => (() => void) | undefined> = {
     rooms: () => renderRooms(body, menu),
@@ -154,47 +185,41 @@ function renderMenu(root: HTMLElement, menu: ReturnType<typeof createMenuClient>
 function renderRooms(body: HTMLElement, menu: ReturnType<typeof createMenuClient>): () => void {
   body.innerHTML = `
     <div class="relative">
-      <div class="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.07]">
-        ${shipSvg("#a4ffe8", 420)}
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.06]">
+        ${shipSvg("#a4ffe8", 380)}
       </div>
       <div class="relative z-10">
-        <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-8 border-b-8 border-black pb-4">
+        <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6 border-b-8 border-black pb-5">
           <div>
-            <h2 class="text-display font-display text-primary uppercase tracking-tight stroke-heavy">Rooms</h2>
-            <p class="text-body-sm text-on-surface-variant uppercase tracking-wider mt-2">Todas las operaciones activas en la red.</p>
+            <h2 class="text-display font-display text-primary uppercase tracking-tight stroke-heavy">Operaciones activas</h2>
+            <p class="text-body-sm text-on-surface-variant uppercase tracking-wider mt-2">Sectores disponibles en la red.</p>
           </div>
+          <button id="create-btn" type="button" class="pressed bg-primary text-on-primary text-body-sm font-bold py-3 px-6 rounded-full border-4 border-black block-shadow uppercase flex items-center gap-2 justify-center">
+            <span class="material-symbols-outlined text-lg">add_box</span> Crear operación
+          </button>
+        </div>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
           <div id="room-filters" class="hidden sm:flex gap-2">
             <button type="button" data-filter="all" class="room-filter px-4 py-2 bg-secondary text-on-secondary border-4 border-black text-caption uppercase block-shadow">All</button>
             <button type="button" data-filter="public" class="room-filter px-4 py-2 bg-surface-container border-4 border-black text-caption text-on-surface uppercase block-shadow">Public</button>
             <button type="button" data-filter="private" class="room-filter px-4 py-2 bg-surface-container border-4 border-black text-caption text-on-surface uppercase block-shadow">Private</button>
           </div>
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <section class="lg:col-span-2">
-            <div id="rooms-status" class="text-caption text-on-surface-variant uppercase mb-5">conectando...</div>
-            <div id="rooms-body" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-          </section>
-          <aside class="flex flex-col gap-6">
-            <form id="join-form" class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6 flex flex-col gap-5">
-              <h3 class="text-heading-sm font-display text-secondary uppercase">Unirse con código</h3>
-              <div class="relative">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">key</span>
-                <input
-                  id="join-code"
-                  maxlength="8"
-                  placeholder="Código"
-                  class="w-full pl-10 pr-3 py-2 bg-surface-high border-4 border-black rounded-lg text-body-sm text-carbon uppercase placeholder:text-slate-gray focus:outline-none focus:border-secondary"
-                />
-              </div>
-              <button type="submit" class="pressed bg-secondary text-on-secondary text-body-sm font-bold py-2 rounded-full border-4 border-black block-shadow">
-                Unirse
-              </button>
-            </form>
-            <button id="create-btn" type="button" class="pressed bg-primary text-on-primary text-body-sm font-bold py-2 rounded-full border-4 border-black block-shadow uppercase">
-              Crear operación
+          <form id="join-form" class="flex items-center gap-2 bg-surface-container border-8 border-black rounded-full block-shadow-md pl-4 pr-2 py-2 w-full md:w-auto">
+            <span class="material-symbols-outlined text-on-surface-variant">key</span>
+            <input
+              id="join-code"
+              maxlength="8"
+              placeholder="Código"
+              class="w-28 bg-transparent text-body-sm text-carbon uppercase placeholder:text-slate-gray focus:outline-none"
+            />
+            <button type="submit" class="pressed bg-secondary text-on-secondary text-body-sm font-bold py-2 px-5 rounded-full border-4 border-black block-shadow">
+              Unirse
             </button>
-          </aside>
+          </form>
         </div>
+        <p id="join-error" class="hidden text-body-sm text-error font-bold uppercase mb-5"></p>
+        <div id="rooms-status" class="text-caption text-on-surface-variant uppercase mb-5">conectando...</div>
+        <div id="rooms-body" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
       </div>
     </div>
   `;
@@ -246,18 +271,29 @@ function renderRooms(body: HTMLElement, menu: ReturnType<typeof createMenuClient
 
   const joinForm = document.getElementById("join-form") as HTMLFormElement;
   const joinCode = document.getElementById("join-code") as HTMLInputElement;
+  const joinErrorEl = document.getElementById("join-error");
   joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
     playClick();
     const code = joinCode.value.trim().toUpperCase();
     if (!code) return;
     const match = menu.getRooms().find((r) => r.id.toUpperCase().endsWith(`-${code}`));
-    const name = match ? `&name=${encodeURIComponent(match.name)}` : "";
-    window.location.href = `/room?id=${encodeURIComponent(match ? match.id : `prv-${code}`)}${name}`;
+    if (!match) {
+      if (joinErrorEl) {
+        joinErrorEl.textContent = "Sala no encontrada con ese código.";
+        joinErrorEl.classList.remove("hidden");
+      }
+      return;
+    }
+    const name = `&name=${encodeURIComponent(match.name)}`;
+    window.location.href = `/room?id=${encodeURIComponent(match.id)}${name}`;
+  });
+  joinCode.addEventListener("input", () => {
+    joinErrorEl?.classList.add("hidden");
   });
   document.getElementById("create-btn")?.addEventListener("click", () => {
     playClick();
-    openCreateModal();
+    openCreateModal(menu);
   });
 
   setFilterButton("all");
@@ -273,7 +309,7 @@ function renderReglas(body: HTMLElement): undefined {
   return undefined;
 }
 
-function openCreateModal(): void {
+function openCreateModal(menu: ReturnType<typeof createMenuClient>): void {
   const existing = document.getElementById("create-modal");
   if (existing) {
     existing.classList.remove("hidden");
@@ -316,7 +352,15 @@ function openCreateModal(): void {
     e.preventDefault();
     playClick();
     const mode = createMode.value as "public" | "private";
-    const id = mode === "public" ? randomRoomId() : `prv-${randomRoomCode()}`;
+    let id = "";
+    for (let i = 0; i < 8; i++) {
+      const candidate = mode === "public" ? randomRoomId() : `prv-${randomRoomCode()}`;
+      if (!menu.getRooms().some((r) => r.id === candidate)) {
+        id = candidate;
+        break;
+      }
+    }
+    if (!id) id = mode === "public" ? randomRoomId() : `prv-${randomRoomCode()}`;
     const name = createName.value.trim() || "Room";
     window.location.href = `/room?id=${encodeURIComponent(id)}&host=1&name=${encodeURIComponent(name)}`;
   });
@@ -329,33 +373,32 @@ function openCreateModal(): void {
 function roomCard(name: string, players: number, hostName: string, id: string, playing: boolean, mode: "public" | "private"): HTMLElement {
   const card = document.createElement("div");
   card.className =
-    "bg-surface-container border-8 border-black p-4 rounded-xl block-shadow-md flex flex-col group relative overflow-hidden transition-transform hover:-translate-y-1";
+    "bg-surface-container border-8 border-black p-4 rounded-xl block-shadow-md flex flex-col group relative overflow-hidden transition-all hover:-translate-y-1 hover:shadow-[0_0_28px_rgba(164,255,232,0.25)]";
   const privateRoom = mode === "private";
-  const locked = playing || players >= 4 || privateRoom;
-  const label = playing ? "En curso" : players >= 4 ? "Llena" : privateRoom ? "Privada" : "Unirse";
+  const locked = players >= 4 || privateRoom;
+  const label = privateRoom ? "Privada" : players >= 4 ? "Llena" : playing ? "Entrar" : "Unirse";
   const code = id.slice(id.indexOf("-") + 1);
   card.innerHTML = `
-    <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-    <div class="h-32 bg-surface-high border-4 border-black rounded-lg mb-4 p-2 relative overflow-hidden flex items-center justify-center">
-      <div class="absolute inset-0 opacity-20" style="background-image: radial-gradient(circle at 2px 2px, #a4ffe8 1px, transparent 0); background-size: 16px 16px;"></div>
-      <span class="material-symbols-outlined text-6xl text-secondary z-10" style="font-variation-settings: 'wght' 200;">cable</span>
+    <div class="h-28 rounded-lg mb-4 relative overflow-hidden border-4 border-black bg-black/40 flex items-center justify-center">
+      <div class="space-stars absolute inset-0 opacity-40"></div>
+      <div class="space-planet space-planet-sm absolute -bottom-14 -left-10 opacity-30"></div>
+      <span class="material-symbols-outlined text-5xl text-secondary z-10" style="font-variation-settings: 'wght' 200;">cable</span>
+      ${playing ? '<div class="absolute top-2 right-2 z-10 bg-secondary text-on-secondary px-2 py-0.5 text-[10px] uppercase border-2 border-black font-bold">EN CURSO</div>' : ""}
       ${privateRoom
-        ? `<div class="absolute top-2 left-2 bg-black px-2 py-1 text-[10px] text-tertiary uppercase border-2 border-tertiary">PRIV</div>
-           <div class="absolute top-2 right-2 bg-black px-2 py-1 text-[10px] text-tertiary uppercase border-2 border-tertiary"><span class="material-symbols-outlined text-[12px]">lock</span></div>`
-        : `<div class="absolute top-2 left-2 bg-black px-2 py-1 text-[10px] text-secondary uppercase border-2 border-secondary">Sec: ${escapeHtml(code)}</div>
-           <div class="absolute top-2 right-2 bg-black px-2 py-1 text-[10px] text-tertiary uppercase border-2 border-tertiary">PUB</div>`}
+        ? `<div class="absolute top-2 left-2 z-10 bg-black px-2 py-0.5 text-[10px] text-tertiary uppercase border-2 border-tertiary flex items-center gap-1">PRIV <span class="material-symbols-outlined text-[11px]">lock</span></div>`
+        : `<div class="absolute top-2 left-2 z-10 bg-black px-2 py-0.5 text-[10px] text-secondary uppercase border-2 border-secondary">Sec: ${escapeHtml(code)}</div>`}
     </div>
-    <div class="flex justify-between items-start mb-2">
+    <div class="flex justify-between items-start mb-2 gap-2">
       <h3 class="text-heading-sm font-display text-on-surface uppercase truncate pr-2">${escapeHtml(name)}</h3>
-      <div class="bg-surface-highest border-2 border-black px-2 py-1 flex items-center gap-1 rounded">
+      <div class="flex items-center gap-1 bg-surface-highest border-2 border-black px-2 py-1 rounded shrink-0">
         <span class="material-symbols-outlined text-sm text-secondary">group</span>
         <span class="text-caption text-on-surface">${players}/4</span>
       </div>
     </div>
-    <p class="text-body-sm text-on-surface-variant mb-6 uppercase">Host: ${escapeHtml(hostName)}</p>
-    <div class="mt-auto pt-4 border-t-4 border-black border-dashed flex justify-between items-center">
-      <div class="flex gap-1">
-        ${cableStrip(players)}
+    <p class="text-body-sm text-on-surface-variant mb-4 uppercase">Host: ${escapeHtml(hostName)}</p>
+    <div class="flex items-end justify-between gap-3 mt-auto">
+      <div class="flex items-end gap-1">
+        ${crewHeads(players)}
       </div>
       <div class="flex flex-col items-end gap-1">
         <button class="join-btn px-6 py-2 ${locked ? "bg-surface-container text-on-surface-variant border-4 border-black cursor-not-allowed" : "bg-secondary text-on-secondary border-4 border-black block-shadow pressed"} text-caption uppercase rounded-full">${label}</button>
@@ -370,11 +413,13 @@ function roomCard(name: string, players: number, hostName: string, id: string, p
   return card;
 }
 
-function cableStrip(players: number): string {
+function crewHeads(players: number): string {
   let out = "";
   for (let i = 0; i < 4; i++) {
-    const on = i < players;
-    out += `<span class="w-2 h-8 ${on ? "bg-error" : "bg-surface-highest"} border-2 border-black inline-block"></span>`;
+    const color = CREW_COLORS[i % CREW_COLORS.length];
+    out += i < players
+      ? `<span class="inline-block -ml-1 first:ml-0">${crewmateSvg(color, 24)}</span>`
+      : `<span class="inline-block w-6 h-6 rounded-full border-2 border-dashed border-on-surface-variant/50 bg-surface-high -ml-1 first:ml-0"></span>`;
   }
   return out;
 }

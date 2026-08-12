@@ -1,3 +1,5 @@
+import { spaceBackdrop } from "./space";
+
 const INTRO_MS = 2200;
 const FADE_MS = 350;
 
@@ -26,9 +28,10 @@ export function playIntro(): void {
   overlay.id = "intro-overlay";
   overlay.className = "intro-overlay analog-texture";
   overlay.innerHTML = `
-    <div class="intro-content">
-      <h1 class="intro-title font-display text-hero text-primary tracking-tighter uppercase stroke-heavy" aria-label="Cable Rush">
-        ${"CABLE RUSH"
+    ${spaceBackdrop()}
+    <div class="intro-content relative z-10">
+      <h1 class="intro-title font-display text-hero text-primary tracking-tighter uppercase stroke-heavy" aria-label="Wirebreak">
+        ${"WIREBREAK"
           .split("")
           .map(
             (ch, i) =>

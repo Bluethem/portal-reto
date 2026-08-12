@@ -46,7 +46,10 @@ function currentDirectorId(j) {
   if (j.directorId) return j.directorId;
   const p = j.room.getSnapshot().presence;
   if (!p || p.kind !== "detailed") return null;
-  const dir = p.participants.find((x) => x.metadata?.role === "judge");
+  const dir = p.participants.find((x) => {
+    const id = x.metadata?.userId ?? x.id;
+    return x.metadata?.role === "judge" && !j.kicked.has(id);
+  });
   return dir ? dir.id : null;
 }
 
@@ -60,6 +63,7 @@ function roomMembers(j) {
     const id = x.metadata?.userId ?? x.id;
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    if (j.kicked.has(id)) continue;
     out.push({ id, role: id === j.directorId ? "judge" : "cutter" });
   }
   return out;
@@ -178,6 +182,8 @@ export class JudgeDO {
       cutCount: 0,
       timerMs: START_TIMER_MS,
       effects: [],
+      lastCut: null,
+      kicked: new Set(),
       nextEffectAt: Date.now() + PERIODIC_EFFECT_INTERVAL_MS,
       started: false,
       finished: false,
@@ -192,6 +198,11 @@ export class JudgeDO {
       const content = m.content;
       if (!("type" in content)) return;
       if (content.type === "judge") j.directorId = content.judgeId;
+      if (content.type === "kick") {
+        j.kicked.add(content.targetId);
+        if (j.directorId === content.targetId) j.directorId = null;
+        if (j.started && !j.finished) this.publish(j);
+      }
       if (content.type === "start" && !j.started) {
         j.started = true;
         j.hintBudget = 5;
@@ -203,18 +214,21 @@ export class JudgeDO {
 
     actions.on("message", (m) => {
       if (!j.started || j.finished) return;
+      if (j.kicked.has(m.sender.id)) return;
       if (m.content.type === "hint-request") {
         void handleHintRequest(j, this.env, m.sender.id);
         return;
       }
       if (m.content.type !== "cut") return;
       const label = m.content.label;
+      const cutId = m.content.id ?? "";
       const expected = j.order[j.cutCount];
       console.log(`[judge] ${roomId} corte: ${label} (esperado ${expected ?? "-"})`);
       if (label === expected) {
         const c = j.cables.find((c) => c.label === label);
         if (c) c.cut = true;
         j.cutCount++;
+        j.lastCut = { id: cutId, ok: true };
         if (j.cutCount === j.order.length) {
           j.level++;
           j.timerMs = Math.min(j.timerMs + LEVEL_BONUS_MS, START_TIMER_MS + LEVEL_BONUS_MS * 10);
@@ -225,6 +239,7 @@ export class JudgeDO {
         }
       } else {
         j.timerMs = Math.max(0, j.timerMs - CUT_PENALTY_MS);
+        j.lastCut = { id: cutId, ok: false };
         if (j.level >= EFFECTS_MIN_LEVEL) {
           addEffect(j, { kind: "freeze", userId: m.sender.id, expiresAt: Date.now() + FREEZE_MS });
           if (j.level >= EFFECTS_EXTRA_MIN_LEVEL && Math.random() < EXTRA_GLOBAL_CHANCE) {
@@ -246,6 +261,7 @@ export class JudgeDO {
     j.rules = gen.rules;
     j.cutCount = 0;
     j.effects = [];
+    j.lastCut = null;
     j.nextEffectAt = Date.now() + PERIODIC_EFFECT_INTERVAL_MS;
     console.log(`[judge] ${j.roomId} nivel ${j.level} seed=${gen.seed} soluciones=${gen.solutions} reglas=${gen.rules.steps.length}`);
     this.publish(j);
@@ -261,6 +277,7 @@ export class JudgeDO {
         cutCount: j.cutCount,
         timerMs: j.timerMs,
         effects: activeEffects(j),
+        lastCut: j.lastCut,
         hintRemaining: j.hintBudget,
         members: roomMembers(j),
         updatedAt: Date.now(),
@@ -293,6 +310,7 @@ export class JudgeDO {
             cutCount: j.cutCount,
             timerMs: 0,
             effects: [],
+            lastCut: j.lastCut,
             hintRemaining: j.hintBudget,
             members: roomMembers(j),
             updatedAt: Date.now(),

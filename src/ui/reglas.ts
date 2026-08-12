@@ -18,7 +18,7 @@ export function reglasHtml(): string {
     <div class="flex flex-col gap-6">
       <div class="border-b-8 border-black pb-4">
         <h2 class="text-display font-display text-primary uppercase tracking-tight stroke-heavy">Reglas del juego</h2>
-        <p class="text-body-sm text-on-surface-variant uppercase tracking-wider mt-2">Cable Rush — guía rápida de la operación.</p>
+        <p class="text-body-sm text-on-surface-variant uppercase tracking-wider mt-2">Wirebreak — guía rápida de la operación.</p>
       </div>
 
       <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6">

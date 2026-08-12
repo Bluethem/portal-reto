@@ -4,6 +4,7 @@ import type {
   ChatEntry,
   ChatMessage,
   CursorMessage,
+  PlayerInfo,
   PlayerMeta,
   RoomAction,
   RoomContent,
@@ -29,14 +30,14 @@ export interface MenuClient {
 export interface RoomClient {
   getChannelStatus(): ChannelStatus;
   getSelfId(): string;
-  getPlayers(): { id: string; name: string; host: boolean }[];
+  getPlayers(): PlayerInfo[];
   subscribeStatus(cb: (s: ChannelStatus) => void): () => void;
-  subscribePresence(cb: (players: { id: string; name: string; host: boolean }[]) => void): () => void;
+  subscribePresence(cb: (players: PlayerInfo[]) => void): () => void;
   subscribeEvents(cb: (e: RoomEvent) => void): () => void;
   subscribeChat(cb: (entries: ChatEntry[]) => void): () => void;
   subscribeState(cb: (s: RoomState | null) => void): () => void;
   getState(): RoomState | null;
-  sendCut(label: string): Promise<void>;
+  sendCut(label: string, id?: string): Promise<void>;
   sendHintRequest(): Promise<void>;
   subscribeCursor(cb: (c: CursorMessage) => void): () => void;
   sendCursor(x: number, y: number, name: string, userId: string): void;
@@ -106,7 +107,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
 
   let selfId = "";
   const statusListeners = new Set<(s: ChannelStatus) => void>();
-  const presenceListeners = new Set<(p: { id: string; name: string; host: boolean }[]) => void>();
+  const presenceListeners = new Set<(p: PlayerInfo[]) => void>();
   const eventListeners = new Set<(e: RoomEvent) => void>();
   const chatListeners = new Set<(entries: ChatEntry[]) => void>();
   const cursorListeners = new Set<(c: CursorMessage) => void>();
@@ -129,7 +130,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
       }));
   }
 
-  function players(): { id: string; name: string; host: boolean }[] {
+  function players(): PlayerInfo[] {
     const p = room.getSnapshot().presence as DetailedPresence | undefined;
     if (!p || p.kind !== "detailed") return [];
     const seen = new Set<string>();
@@ -145,6 +146,7 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
         id: (x.metadata?.userId as string | undefined) ?? x.id,
         name: (x.metadata?.name as string | undefined) ?? "?",
         host: (x.metadata?.host as boolean | undefined) ?? false,
+        color: x.metadata?.color as string | undefined,
       }));
   }
 
@@ -226,8 +228,8 @@ export function joinRoom(roomId: string, meta: PlayerMeta): RoomClient {
         .find((m) => "status" in m.content) as { content: RoomState } | undefined;
       return last?.content ?? null;
     },
-    sendCut: async (label) => {
-      await actions.send({ content: { type: "cut", label } as RoomAction });
+    sendCut: async (label, id) => {
+      await actions.send({ content: { type: "cut", label, id } as RoomAction });
     },
     sendHintRequest: async () => {
       await actions.send({ content: { type: "hint-request" } as RoomAction });

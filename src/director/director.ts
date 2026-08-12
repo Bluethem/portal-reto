@@ -1,4 +1,5 @@
 import type { RoomClient } from "../portal/client";
+import { spaceBackdrop } from "../ui/space";
 
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
@@ -8,7 +9,9 @@ function escapeHtml(text: string): string {
 
 export function mountDirector(container: HTMLElement, client: RoomClient): () => void {
   container.innerHTML = `
-    <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6">
+    <div class="relative h-full">
+      ${spaceBackdrop()}
+      <div class="relative z-10 bg-surface-container border-8 border-black rounded-xl block-shadow-md p-6">
       <div class="flex items-center gap-3 mb-6">
         <span class="w-10 h-10 bg-secondary rounded-full flex items-center justify-center shrink-0 border-4 border-black">
           <span class="material-symbols-outlined text-on-secondary">menu_book</span>
@@ -31,6 +34,7 @@ export function mountDirector(container: HTMLElement, client: RoomClient): () =>
         <button id="hint-btn" type="button" class="w-full flex items-center justify-center gap-2 bg-secondary text-on-secondary font-bold rounded-full border-4 border-black block-shadow hover:bg-tertiary hover:text-on-tertiary transition-transform active:scale-95 py-2 text-caption uppercase disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-outlined text-lg">tips_and_updates</span> Pedir pista
         </button>
+      </div>
       </div>
     </div>
   `;

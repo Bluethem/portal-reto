@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@portalsdk/core": "^0.1.5",
+    "animejs": "^4.5.0",
     "astro": "^7.1.6",
     "livekit-client": "^2.21.0"
   },

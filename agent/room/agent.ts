@@ -38,6 +38,8 @@ interface Judge {
   cutCount: number;
   timerMs: number;
   effects: StateEffect[];
+  lastCut: { id: string; ok: boolean } | null;
+  kicked: Set<string>;
   nextEffectAt: number;
   timer: ReturnType<typeof setInterval> | null;
   tick: ReturnType<typeof setInterval> | null;
@@ -67,6 +69,7 @@ function roomMembers(j: Judge): { id: string; role: "judge" | "cutter" }[] {
     const id = (x.metadata?.userId as string | undefined) ?? x.id;
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    if (j.kicked.has(id)) continue;
     out.push({ id, role: id === j.directorId ? "judge" : "cutter" });
   }
   return out;
@@ -117,6 +120,7 @@ function publish(j: Judge): void {
       cutCount: j.cutCount,
       timerMs: j.timerMs,
       effects: activeEffects(j),
+      lastCut: j.lastCut,
       hintRemaining: j.hintBudget,
       members: roomMembers(j),
       updatedAt: Date.now(),
@@ -132,7 +136,12 @@ function currentDirectorId(j: Judge): string | null {
   if (j.directorId) return j.directorId;
   const p = j.room.getSnapshot().presence as DetailedPresence | undefined;
   if (!p || p.kind !== "detailed") return null;
-  return p.participants.find((x) => x.metadata?.role === "judge")?.id ?? null;
+  return (
+    p.participants.find((x) => {
+      const id = (x.metadata?.userId as string | undefined) ?? x.id;
+      return x.metadata?.role === "judge" && !j.kicked.has(id);
+    })?.id ?? null
+  );
 }
 
 async function buildHint(j: Judge): Promise<string> {
@@ -163,6 +172,7 @@ function startLevel(j: Judge): void {
   j.rules = gen.rules;
   j.cutCount = 0;
   j.effects = [];
+  j.lastCut = null;
   j.nextEffectAt = Date.now() + PERIODIC_EFFECT_INTERVAL_MS;
   console.log(`[agent] ${j.roomId} nivel ${j.level} seed=${gen.seed} soluciones=${gen.solutions} reglas=${gen.rules.steps.length}`);
   publish(j);
@@ -174,7 +184,7 @@ function startTimer(j: Judge): void {
     j.timerMs = Math.max(0, j.timerMs - 1000);
     if (j.timerMs === 0) {
       j.finished = true;
-      void j.room.send({ content: { status: "finished", level: j.level, cables: j.cables, rules: j.rules, cutCount: j.cutCount, timerMs: 0, effects: [], hintRemaining: j.hintBudget, members: roomMembers(j), updatedAt: Date.now() } });
+      void j.room.send({ content: { status: "finished", level: j.level, cables: j.cables, rules: j.rules, cutCount: j.cutCount, timerMs: 0, effects: [], lastCut: j.lastCut, hintRemaining: j.hintBudget, members: roomMembers(j), updatedAt: Date.now() } });
       stopTimer(j);
       return;
     }
@@ -229,6 +239,8 @@ function bootJudge(roomId: string): void {
     cutCount: 0,
     timerMs: START_TIMER_MS,
     effects: [],
+    lastCut: null,
+    kicked: new Set<string>(),
     nextEffectAt: Date.now() + PERIODIC_EFFECT_INTERVAL_MS,
     timer: null,
     tick: null,
@@ -245,6 +257,11 @@ function bootJudge(roomId: string): void {
     const content = m.content;
     if (!("type" in content)) return;
     if (content.type === "judge") j.directorId = content.judgeId;
+    if (content.type === "kick") {
+      j.kicked.add(content.targetId);
+      if (j.directorId === content.targetId) j.directorId = null;
+      if (j.started && !j.finished) publish(j);
+    }
     if (content.type === "start" && !j.started) {
       j.started = true;
       j.hintBudget = 5;
@@ -257,18 +274,21 @@ function bootJudge(roomId: string): void {
 
   actions.on("message", (m) => {
     if (!j.started || j.finished) return;
+    if (j.kicked.has(m.sender.id)) return;
     if (m.content.type === "hint-request") {
       void handleHintRequest(j, m.sender.id);
       return;
     }
     if (m.content.type !== "cut") return;
     const label = m.content.label;
+    const cutId = m.content.id ?? "";
     const expected = j.order[j.cutCount];
     console.log(`[agent] ${roomId} corte: ${label} (esperado ${expected ?? "-"})`);
     if (label === expected) {
       const c = j.cables.find((c) => c.label === label);
       if (c) c.cut = true;
       j.cutCount++;
+      j.lastCut = { id: cutId, ok: true };
       if (j.cutCount === j.order.length) {
         j.level++;
         j.timerMs = Math.min(j.timerMs + LEVEL_BONUS_MS, START_TIMER_MS + LEVEL_BONUS_MS * 10);
@@ -279,6 +299,7 @@ function bootJudge(roomId: string): void {
       }
     } else {
       j.timerMs = Math.max(0, j.timerMs - CUT_PENALTY_MS);
+      j.lastCut = { id: cutId, ok: false };
       if (j.level >= EFFECTS_MIN_LEVEL) {
         addEffect(j, { kind: "freeze", userId: m.sender.id, expiresAt: Date.now() + FREEZE_MS });
         if (j.level >= EFFECTS_EXTRA_MIN_LEVEL && Math.random() < EXTRA_GLOBAL_CHANCE) {

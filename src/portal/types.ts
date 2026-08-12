@@ -5,6 +5,14 @@ export interface PlayerMeta {
   name: string;
   host: boolean;
   role: Role | null;
+  color?: string;
+}
+
+export interface PlayerInfo {
+  id: string;
+  name: string;
+  host: boolean;
+  color?: string;
 }
 
 export interface RoomInfo {
@@ -21,7 +29,8 @@ export interface RoomInfo {
 export type RoomEvent =
   | { type: "judge"; judgeId: string }
   | { type: "start" }
-  | { type: "hint"; text: string; remaining: number; target: string };
+  | { type: "hint"; text: string; remaining: number; target: string }
+  | { type: "kick"; targetId: string };
 
 export interface ChatMessage {
   type: "chat";
@@ -64,13 +73,14 @@ export interface RoomState {
   cutCount: number;
   timerMs: number;
   effects: StateEffect[];
+  lastCut: { id: string; ok: boolean } | null;
   hintRemaining?: number;
   members?: { id: string; role: Role }[];
   updatedAt: number;
 }
 
 export type RoomAction =
-  | { type: "cut"; label: string }
+  | { type: "cut"; label: string; id?: string }
   | { type: "hint-request" };
 
 export interface CursorMessage {

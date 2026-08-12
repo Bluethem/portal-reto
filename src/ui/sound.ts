@@ -100,3 +100,65 @@ export function playStart(): void {
   blip(ac, 659.25, t + 0.24, 0.1, 0.09, "square");
   blip(ac, 783.99, t + 0.36, 0.18, 0.09, "square");
 }
+
+export function playC4Beep(): void {
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime;
+  blip(ac, 1046.5, t, 0.12, 0.16, "sine");
+  blip(ac, 2093, t, 0.07, 0.05, "triangle");
+}
+
+export function playZap(): void {
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime;
+  blip(ac, 660, t, 0.06, 0.1);
+  blip(ac, 990, t + 0.05, 0.1, 0.1);
+}
+
+export function playExplosion(): void {
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime;
+  const crack = ac.createBufferSource();
+  const cb = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.14), ac.sampleRate);
+  const cd = cb.getChannelData(0);
+  for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * (1 - i / cd.length);
+  crack.buffer = cb;
+  const cg = ac.createGain();
+  cg.gain.setValueAtTime(0.5, t);
+  cg.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  crack.connect(cg);
+  cg.connect(ac.destination);
+  const osc = ac.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(110, t);
+  osc.frequency.exponentialRampToValueAtTime(28, t + 1.4);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(0.7, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+  osc.connect(og);
+  og.connect(ac.destination);
+  const noise = ac.createBufferSource();
+  const nb = ac.createBuffer(1, Math.floor(ac.sampleRate * 2.0), ac.sampleRate);
+  const nd = nb.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * (1 - i / nd.length);
+  noise.buffer = nb;
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(1600, t);
+  lp.frequency.exponentialRampToValueAtTime(60, t + 1.8);
+  const ng = ac.createGain();
+  ng.gain.setValueAtTime(0.6, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
+  noise.connect(lp);
+  lp.connect(ng);
+  ng.connect(ac.destination);
+  osc.start(t);
+  osc.stop(t + 1.7);
+  noise.start(t);
+  noise.stop(t + 2.0);
+  crack.start(t);
+  crack.stop(t + 0.16);
+}

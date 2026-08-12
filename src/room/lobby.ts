@@ -1,22 +1,27 @@
 import { joinRoom } from "../portal/client";
-import type { ChatEntry, Role } from "../portal/types";
+import type { ChatEntry, PlayerInfo, Role } from "../portal/types";
 import { getUserId } from "../shared/identity";
 import { getUsername } from "../shared/username";
+import { getProfileColor } from "../shared/profile";
 import { mountBoard } from "../board/board";
 import { mountDirector } from "../director/director";
 import { VoiceChannel } from "./voice";
 import { crewmateSvg } from "../ui/crewmate";
 import { startLobbyMusic, stopMusic, mountMusicToggle, MUSIC_TOGGLE_HTML } from "../ui/music";
-import { playClick, playJoin, playLeave, playReady, playStart } from "../ui/sound";
-import { renderMobileNav, renderSidebar } from "../ui/shell";
+import { playC4Beep, playClick, playExplosion, playJoin, playLeave, playReady, playStart } from "../ui/sound";
+import { mountSidebarProfile, renderMobileNav, renderSidebar, updateSidebarProfile } from "../ui/shell";
 import type { ShellItem } from "../ui/shell";
 import { reglasHtml } from "../ui/reglas";
+import { spaceBackdrop } from "../ui/space";
+import { CREW_COLORS } from "../ui/crew-colors";
+import { burst, chatIn, pop, slidePanel, staggerIn } from "../ui/anim";
 
 const ROOM_CAPACITY = 4;
 const MIN_PLAYERS_TO_START = 2;
 const ALIVE_INTERVAL_MS = 1000;
 const ALIVE_TIMEOUT_MS = 3000;
-const CREW_COLORS = ["#ffb4a9", "#2196f3", "#4caf50", "#cdcd00", "#a4ffe8", "#c51111"];
+const JOIN_GRACE_MS = 2500;
+const JOIN_GRACE_MAX = 3;
 const ROOM_ITEMS: ShellItem[] = [
   { label: "Rooms", icon: "meeting_room", href: "/" },
   { label: "Room", icon: "cable", view: "room" },
@@ -27,17 +32,18 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   const root = document.getElementById("app");
   if (!root) return;
 
-  const username = getUsername() ?? "anon";
+  let username = getUsername() ?? "anon";
   const isUrlHost = isHostArg;
   let isHost = isHostArg;
   const selfUserId = getUserId();
   let roomName = roomNameArg || roomId;
-  const client = joinRoom(roomId, { userId: selfUserId, name: username, host: isHost, role: null });
+  const client = joinRoom(roomId, { userId: selfUserId, name: username, host: isHost, role: null, color: getProfileColor() });
 
   root.innerHTML = `
-    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface">
+    <div class="min-h-screen flex flex-col lg:flex-row bg-surface text-on-surface relative overflow-hidden">
+      ${spaceBackdrop()}
       ${renderSidebar(username, ROOM_ITEMS, "room", { footerSlot: MUSIC_TOGGLE_HTML })}
-      <main class="flex-1 h-screen flex flex-col overflow-hidden">
+      <main class="relative z-10 flex-1 h-screen flex flex-col overflow-hidden">
         <header class="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-surface-container border-b-8 border-black block-shadow">
           <div class="flex items-center gap-3 min-w-0">
             <span id="room-id" class="text-body-sm text-on-surface truncate">Operación: ${escapeHtml(roomName)}</span>
@@ -62,8 +68,8 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
             </a>
           </div>
         </header>
-        <div class="flex-1 min-h-0 overflow-y-auto px-6 lg:px-10 pt-6 pb-32 lg:pb-6">
-          <div class="max-w-[1600px] mx-auto h-full min-h-0 flex flex-col">
+        <div class="relative flex-1 min-h-0 overflow-y-auto px-6 lg:px-10 pt-6 pb-32 lg:pb-6">
+          <div class="relative z-10 max-w-[1600px] mx-auto h-full min-h-0 flex flex-col">
             <div id="lobby-heading" class="flex flex-col md:flex-row justify-between items-end gap-4 border-b-4 border-outline-variant pb-4">
               <div>
                 <h2 class="text-display font-display text-secondary uppercase stroke-heavy">Sala de Espera</h2>
@@ -91,7 +97,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
                     disabled
                     class="pressed w-full bg-secondary text-on-secondary text-heading-sm font-bold py-6 rounded-2xl border-8 border-black block-shadow disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Iniciar partida
+                    <span class="inline-block">Iniciar partida</span>
                   </button>
                   <p id="start-hint" class="text-center text-caption text-on-surface-variant uppercase mt-4">Esperando al menos 2 jugadores...</p>
                 </div>
@@ -141,7 +147,17 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
         <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 max-w-md w-full text-center">
           <span class="material-symbols-outlined text-[56px] text-tertiary">lock</span>
           <h2 class="text-display font-display text-on-surface uppercase">Partida en curso</h2>
-          <p class="text-body-sm text-on-surface-variant uppercase mt-2">La sala ya comenzó y no acepta más jugadores.</p>
+          <p class="text-body-sm text-on-surface-variant uppercase mt-2">La sala está completa o ya no acepta más jugadores.</p>
+          <a href="/" class="pressed block mt-7 w-full bg-primary text-on-primary text-body font-bold py-3 rounded-full border-4 border-black block-shadow transition-colors uppercase">
+            Volver al menú
+          </a>
+        </div>
+      </div>
+      <div id="kicked" class="hidden fixed inset-0 z-[60] bg-surface/90 backdrop-blur flex items-center justify-center px-6">
+        <div class="bg-surface-container border-8 border-black rounded-xl block-shadow-md p-10 max-w-md w-full text-center">
+          <span class="material-symbols-outlined text-[56px] text-error">block</span>
+          <h2 class="text-display font-display text-on-surface uppercase">Fuiste expulsado</h2>
+          <p class="text-body-sm text-on-surface-variant uppercase mt-2">El host te sacó de la sala.</p>
           <a href="/" class="pressed block mt-7 w-full bg-primary text-on-primary text-body font-bold py-3 rounded-full border-4 border-black block-shadow transition-colors uppercase">
             Volver al menú
           </a>
@@ -154,6 +170,9 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           </button>
           ${reglasHtml()}
         </div>
+      </div>
+      <div id="resume-toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-[70] bg-tertiary text-on-tertiary border-4 border-black rounded-full px-5 py-2 text-body-sm font-bold uppercase block-shadow whitespace-nowrap">
+        Partida en curso · entraste como <span id="resume-role">cortador</span>
       </div>
       ${renderMobileNav(ROOM_ITEMS, "room")}
     </div>
@@ -299,6 +318,14 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   window.addEventListener("pointerdown", startMusicOnce);
   window.addEventListener("keydown", startMusicOnce);
   mountMusicToggle();
+  mountSidebarProfile(() => {
+    username = getUsername() ?? username;
+    updateSidebarProfile(username, getProfileColor());
+    const userNameEl = document.getElementById("user-name");
+    if (userNameEl) userNameEl.textContent = username;
+    renderPlayers(activePlayers());
+    client.setMeta(buildMeta(isHost, selfRole));
+  });
 
   let announced = false;
   let judgeAnnounced = false;
@@ -308,15 +335,18 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   let selfRole: Role | null = null;
   let cleanup: (() => void) | null = null;
   const lastSeen = new Map<string, number>();
+  const cardColors = new Map<string, string>();
+  const kickedIds = new Set<string>();
+  let judgeCelebrate: string | null = null;
 
   function buildMeta(
     host: boolean,
     role: Role | null
-  ): { userId: string; name: string; host: boolean; role: Role | null } {
-    return { userId: selfUserId, name: username, host, role };
+  ): { userId: string; name: string; host: boolean; role: Role | null; color: string } {
+    return { userId: selfUserId, name: username, host, role, color: getProfileColor() };
   }
 
-  function activePlayers(): { id: string; name: string; host: boolean }[] {
+  function activePlayers(): PlayerInfo[] {
     return client.getPlayers().filter((p) => lastSeen.has(p.id));
   }
 
@@ -330,52 +360,60 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
 
   function statusBadge(player: { id: string; host: boolean }): string {
     if (player.id === judgeId) return "Director";
-    if (started) return "Cortador";
+    if (started) return "Crewmate";
     if (player.host || player.id === hostId) return "Host de operación";
-    return "Operativo";
+    return "Crewmate";
   }
 
   const seenPlayerIds = new Set<string>();
 
-  function renderPlayers(list: { id: string; name: string; host: boolean }[]): void {
+  function renderPlayers(list: PlayerInfo[]): void {
     if (!playersEl) return;
-    const ids = new Set(list.map((p) => p.id));
+    const visible = list.filter((p) => !kickedIds.has(p.id));
+    const ids = new Set(visible.map((p) => p.id));
     if (seenPlayerIds.size > 0) {
       for (const id of ids) if (!seenPlayerIds.has(id)) playJoin();
       for (const id of seenPlayerIds) if (!ids.has(id)) playLeave();
     }
     if (!started && list.length === ROOM_CAPACITY && seenPlayerIds.size < ROOM_CAPACITY) playReady();
+    const prev = new Set(seenPlayerIds);
     seenPlayerIds.clear();
     for (const id of ids) seenPlayerIds.add(id);
     playersEl.replaceChildren();
     speakingDotEls.clear();
     const selfId = client.getSelfId();
-    const merged = [...list];
+    const merged = [...visible];
     if (selfId && !merged.some((p) => p.id === selfId)) {
-      merged.unshift({ id: selfId, name: username, host: isHost });
+      merged.unshift({ id: selfId, name: username, host: isHost, color: getProfileColor() });
     }
+    const fresh: HTMLElement[] = [];
     for (const [i, p] of merged.slice(0, ROOM_CAPACITY).entries()) {
-      const color = CREW_COLORS[i % CREW_COLORS.length];
+      const color = p.color ?? CREW_COLORS[i % CREW_COLORS.length];
+      cardColors.set(p.id, color);
       const card = document.createElement("div");
+      card.dataset.pid = p.id;
       card.className =
-        "bg-surface-container-high border-8 border-black rounded-xl p-4 block-shadow flex flex-col relative overflow-hidden";
-      const badge = p.id === judgeId ? "DIRECTOR" : started ? "EN CAMPO" : "LISTO";
+        "player-slot relative overflow-hidden border-8 border-black rounded-2xl p-4 flex flex-col gap-2 bg-surface-container/85";
+      const badge = p.id === judgeId ? "DIRECTOR" : started ? "CREWMATE" : "READY";
       const badgeColor = p.id === judgeId
         ? "bg-tertiary text-on-tertiary"
         : started
           ? "bg-secondary text-on-secondary"
           : "bg-surface-variant text-on-surface border-dashed opacity-80";
       card.innerHTML = `
-        <div class="absolute inset-0" style="background: ${color}; opacity: 0.08;"></div>
+        <div class="slot-glow absolute inset-0" style="background: radial-gradient(circle at 50% -20%, ${color}59, transparent 70%);"></div>
         <div class="relative z-10 flex items-center gap-3">
-          <div class="w-14 h-16 shrink-0 flex items-center justify-center">${crewmateSvg(color, 44)}</div>
+          <div class="w-14 h-16 shrink-0 flex items-center justify-center">${crewmateSvg(color, 46)}</div>
           <div class="flex-1 min-w-0">
             <p class="font-bold text-body text-on-surface leading-none truncate">${escapeHtml(p.name)} <span class="squad-speaking" title="Hablando"></span></p>
             <p class="text-caption text-on-surface-variant mt-0.5 uppercase">${statusBadge(p)}</p>
           </div>
-          <span class="${badgeColor} px-2 py-0.5 border-2 border-black rounded text-caption uppercase shrink-0">${badge}</span>
+          ${isHost && p.id !== selfId
+            ? `<button type="button" class="kick-btn shrink-0 w-7 h-7 flex items-center justify-center rounded-full border-4 border-black bg-surface-high text-error hover:bg-error hover:text-on-error transition-colors" title="Expulsar a ${escapeHtml(p.name)}"><span class="material-symbols-outlined text-[14px]">block</span></button>`
+            : ""}
+          <span class="slot-badge ${badgeColor} px-2 py-0.5 border-2 border-black rounded text-caption uppercase shrink-0">${badge}</span>
         </div>
-        <div class="user-vol-row relative z-10 mt-3 flex items-center gap-2 ${p.id === selfId ? "hidden" : ""}">
+        <div class="user-vol-row relative z-10 mt-1 flex items-center gap-2 ${p.id === selfId ? "hidden" : ""}">
           <button type="button" class="user-mute-btn shrink-0 text-on-surface-variant hover:text-error transition-colors" title="Mutear">
             <span class="material-symbols-outlined text-[18px]">volume_up</span>
           </button>
@@ -412,16 +450,24 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           });
         }
       }
+      const kickBtn = card.querySelector<HTMLButtonElement>(".kick-btn");
+      if (kickBtn) {
+        kickBtn.addEventListener("click", () => {
+          playClick();
+          void client.sendEvent({ type: "kick", targetId: p.id });
+        });
+      }
+      if (!prev.has(p.id)) fresh.push(card);
       playersEl.appendChild(card);
     }
     for (let i = merged.length; i < ROOM_CAPACITY; i++) {
       const color = CREW_COLORS[i % CREW_COLORS.length];
       const empty = document.createElement("div");
       empty.className =
-        "bg-surface-high border-8 border-black rounded-xl p-4 flex items-center justify-center border-dashed h-[88px] opacity-60";
+        "player-slot player-slot-empty relative overflow-hidden border-8 border-dashed border-black rounded-2xl p-4 flex items-center justify-center gap-3 h-[88px] opacity-70 bg-surface-high/40";
       empty.innerHTML = `
-        <div class="w-16 h-20 shrink-0 flex items-center justify-center">${crewmateSvg(color, 48)}</div>
-        <p class="text-caption text-on-surface-variant uppercase flex items-center gap-2 ml-3">
+        <div class="w-14 h-16 shrink-0 flex items-center justify-center" style="filter:grayscale(1) opacity(.55)">${crewmateSvg(color, 46)}</div>
+        <p class="text-caption text-on-surface-variant uppercase flex items-center gap-2">
           <span class="material-symbols-outlined">person_add</span>
           Esperando jugador...
         </p>
@@ -429,6 +475,18 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       playersEl.appendChild(empty);
     }
     if (squadCountEl) squadCountEl.textContent = `${merged.length} / ${ROOM_CAPACITY}`;
+    staggerIn(fresh);
+    if (judgeCelebrate) {
+      for (const child of playersEl.children) {
+        const slot = child as HTMLElement;
+        if (slot.dataset.pid !== judgeCelebrate) continue;
+        const badgeEl = slot.querySelector<HTMLElement>(".slot-badge");
+        if (badgeEl) pop(badgeEl);
+        burst(slot, cardColors.get(judgeCelebrate) ?? "#cdcd00");
+        break;
+      }
+      judgeCelebrate = null;
+    }
   }
 
   let chatErrorTimer: ReturnType<typeof setTimeout> | null = null;
@@ -437,6 +495,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     if (!chatLogEl) return;
     if (chatEmptyEl) chatEmptyEl.classList.toggle("hidden", entries.length > 0);
     chatLogEl.replaceChildren();
+    const rows: HTMLElement[] = [];
     for (const { name, text, self, status } of entries) {
       const pending = status === "pending";
       const failed = status === "failed";
@@ -452,8 +511,10 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       if (failed) msg.classList.add("text-error");
       msg.textContent = text;
       row.append(who, msg);
+      rows.push(row);
       chatLogEl.appendChild(row);
     }
+    chatIn(rows);
     chatLogEl.scrollTop = chatLogEl.scrollHeight;
   }
 
@@ -522,6 +583,7 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   function applyJudge(id: string): void {
     judgeId = id;
     judgeAnnounced = true;
+    judgeCelebrate = id;
     selfRole = id === client.getSelfId() ? "judge" : "cutter";
     client.setMeta(buildMeta(isUrlHost, selfRole));
     updateLobbyBanner();
@@ -538,6 +600,12 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
     lobbyLayoutEl?.classList.remove("lg:items-start");
     boardCol?.classList.remove("hidden");
     boardCol?.classList.add("flex");
+    requestAnimationFrame(() => {
+      if (boardCol) slidePanel(boardCol, 36);
+      if (squadCol) slidePanel(squadCol, -36);
+      const stageEl = document.getElementById("stage");
+      if (stageEl) burst(stageEl, "#a4ffe8", 14);
+    });
   }
 
   function applyStart(): void {
@@ -619,7 +687,9 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   });
 
   client.subscribePresence((list) => {
-    for (const p of list) lastSeen.set(p.id, Date.now());
+    for (const p of list) {
+      if (!kickedIds.has(p.id)) lastSeen.set(p.id, Date.now());
+    }
     recomputeHost();
     renderPlayers(list);
     updateLobbyBanner();
@@ -671,11 +741,25 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       renderPlayers(activePlayers());
     }
     if (e.type === "start") applyStart();
+    if (e.type === "kick") {
+      if (e.targetId === client.getSelfId()) {
+        showKicked();
+      } else {
+        kickedIds.add(e.targetId);
+        lastSeen.delete(e.targetId);
+        renderPlayers(activePlayers());
+        updateLobbyBanner();
+        updateStartArea();
+        if (isHost) publish();
+      }
+    }
   });
 
   if (startBtn) {
     startBtn.addEventListener("click", () => {
       playClick();
+      const label = startBtn.querySelector<HTMLElement>("span");
+      if (label) pop(label);
       if (judgeAnnounced) {
         applyStart();
         void client.sendEvent({ type: "start" });
@@ -684,6 +768,56 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
   }
 
   let lockedOut = false;
+  let lastBeepSecs = -1;
+  let lossSounded = false;
+  let joinGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  let joinGraceCycles = 0;
+
+  function scheduleJoinGrace(): void {
+    if (joinGraceTimer) return;
+    joinGraceTimer = setTimeout(() => {
+      joinGraceTimer = null;
+      joinGraceCycles++;
+      const st = client.getState();
+      const free = st !== null && st.status === "playing" && (st.members ?? []).length < ROOM_CAPACITY;
+      if (started) return;
+      if (free && joinGraceCycles < JOIN_GRACE_MAX) {
+        scheduleJoinGrace();
+        return;
+      }
+      if (!lockedOut) {
+        lockedOut = true;
+        if (lockedOutEl) lockedOutEl.classList.remove("hidden");
+        voice.dispose();
+        client.release();
+      }
+    }, JOIN_GRACE_MS);
+  }
+
+  function showResumeToast(): void {
+    const toast = document.getElementById("resume-toast");
+    if (!toast) return;
+    const roleEl = document.getElementById("resume-role");
+    if (roleEl) roleEl.textContent = selfRole === "judge" ? "director" : "cortador";
+    toast.classList.remove("hidden");
+    window.setTimeout(() => toast.classList.add("hidden"), 3200);
+  }
+
+  let kicked = false;
+  function showKicked(): void {
+    if (kicked) return;
+    kicked = true;
+    stopMusic();
+    clearInterval(aliveInterval);
+    clearInterval(pruneInterval);
+    voice.dispose();
+    client.release();
+    const kickedEl = document.getElementById("kicked");
+    if (kickedEl) kickedEl.classList.remove("hidden");
+    window.setTimeout(() => {
+      window.location.href = "/";
+    }, 5000);
+  }
 
   client.subscribeState((s) => {
     if (!s) return;
@@ -699,7 +833,12 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           mountByRole(selfRole);
           switchToGameLayout();
           renderPlayers(activePlayers());
+          showResumeToast();
         } else {
+          if (!lossSounded) {
+            lossSounded = true;
+            playExplosion();
+          }
           if (gameoverEl && goLevelEl) {
             goLevelEl.textContent = String(s.level);
             gameoverEl.classList.remove("hidden");
@@ -707,7 +846,10 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
           return;
         }
       } else if (selfId) {
-        if (!lockedOut) {
+        const members = s.members ?? [];
+        if (s.status === "playing" && members.length < ROOM_CAPACITY && joinGraceCycles < JOIN_GRACE_MAX) {
+          scheduleJoinGrace();
+        } else if (!lockedOut) {
           lockedOut = true;
           if (lockedOutEl) lockedOutEl.classList.remove("hidden");
           voice.dispose();
@@ -725,11 +867,25 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
       timerEl.textContent = text;
       timerEl.classList.toggle("text-error", secs <= 30);
     }
+    if (s.status === "playing") {
+      const secs = Math.max(0, Math.round(s.timerMs / 1000));
+      if (secs > 0 && secs <= 60 && secs !== lastBeepSecs) {
+        lastBeepSecs = secs;
+        playC4Beep();
+        if (secs <= 10) window.setTimeout(() => playC4Beep(), 300);
+      }
+    }
     if (s.status === "finished") {
+      if (!lossSounded) {
+        lossSounded = true;
+        playExplosion();
+      }
       if (timerEl) timerEl.textContent = "00:00";
       if (gameoverEl && goLevelEl) {
         goLevelEl.textContent = String(s.level);
         gameoverEl.classList.remove("hidden");
+        const icon = gameoverEl.querySelector<HTMLElement>(".material-symbols-outlined");
+        if (icon) burst(icon, "#ff5252", 18);
       }
       return;
     }
@@ -756,7 +912,9 @@ export function bootRoom(roomId: string, isHostArg: boolean, roomNameArg: string
 
   client.subscribeActivity((users) => {
     const now = Date.now();
-    for (const id of users) lastSeen.set(id, now);
+    for (const id of users) {
+      if (!kickedIds.has(id)) lastSeen.set(id, now);
+    }
   });
 
   window.addEventListener("beforeunload", () => {
